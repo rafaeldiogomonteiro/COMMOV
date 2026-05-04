@@ -15,9 +15,38 @@ func (r *UserRepo) Create(ctx context.Context, user *entity.User) error {
 	return r.DB.WithContext(ctx).Create(user).Error
 }
 
+func (r *UserRepo) ExistsByUsername(ctx context.Context, username string) (bool, error) {
+	var count int64
+	err := r.DB.WithContext(ctx).
+		Model(&entity.User{}).
+		Where("username = ?", username).
+		Count(&count).Error
+
+	return count > 0, err
+}
+
+func (r *UserRepo) ExistsByEmail(ctx context.Context, email string) (bool, error) {
+	var count int64
+	err := r.DB.WithContext(ctx).
+		Model(&entity.User{}).
+		Where("email = ?", email).
+		Count(&count).Error
+
+	return count > 0, err
+}
+
 func (r *UserRepo) GetByID(ctx context.Context, userID int) (*entity.User, error) {
 	var user entity.User
 	if err := r.DB.WithContext(ctx).First(&user, "user_id = ?", userID).Error; err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*entity.User, error) {
+	var user entity.User
+	if err := r.DB.WithContext(ctx).First(&user, "email = ?", email).Error; err != nil {
 		return nil, err
 	}
 
