@@ -14,6 +14,8 @@ RUN adduser -D -g '' appuser
 
 WORKDIR /app
 
+RUN mkdir -p /app/photos/image && chown -R appuser:appuser /app/photos
+
 COPY --from=builder /bin/commov-backend /usr/local/bin/commov-backend
 
 USER appuser

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -23,11 +24,21 @@ func main() {
 	}
 
 	userRepo := &postgres.UserRepo{DB: db}
+	authService := &services.AuthService{UserRepo: userRepo}
 	userService := &services.UserService{UserRepo: userRepo}
-	userRouter := &router.UserRouter{UserService: userService}
+	if _, created, err := userService.EnsureDefaultUser(context.Background(), cfg.DefaultUser, cfg.DefaultUserPass); err != nil {
+		appLogger.Printf("failed to ensure default user: %v", err)
+		os.Exit(1)
+	} else if created {
+		appLogger.Printf("default user created: %s", cfg.DefaultUser)
+	}
+
+	authRouter := &router.AuthRouter{AuthService: authService}
+	userRouter := &router.UserRouter{UserService: userService, AuthService: authService}
 
 	appRouter := router.NewRouter(router.Dependencies{
 		Logger:     appLogger,
+		AuthRouter: authRouter,
 		UserRouter: userRouter,
 	})
 

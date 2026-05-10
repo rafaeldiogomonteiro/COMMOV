@@ -1,0 +1,23 @@
+info:
+  name: logout
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: http://localhost:8080/logout
+  headers:
+    - name: Authorization
+      value: bearer {{login_header}}
+  auth: inherit
+
+runtime:
+  variables:
+    - name: login_header
+      value: 5130cafd9a2b1bc33619d58b85277346b9536a2492eec905198c7e873ca504e8
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
