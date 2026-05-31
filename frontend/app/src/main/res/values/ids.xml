@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="languageEnglish" type="id" />
+    <item name="languagePortuguese" type="id" />
+    <item name="bottomNavHome" type="id" />
+    <item name="bottomNavProjects" type="id" />
+    <item name="bottomNavSettings" type="id" />
+</resources>

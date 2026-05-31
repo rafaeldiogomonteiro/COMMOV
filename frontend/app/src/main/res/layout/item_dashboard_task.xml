@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="66dp"
+    android:background="@drawable/bg_task_card"
+    android:clipToOutline="true"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <View
+        android:id="@+id/taskAccent"
+        android:layout_width="3dp"
+        android:layout_height="match_parent"
+        android:background="@color/task_red" />
+
+    <FrameLayout
+        android:id="@+id/taskIconContainer"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:layout_marginStart="12dp">
+
+        <ImageView
+            android:id="@+id/taskIcon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="8dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/taskTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/dashboard_text_primary"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/taskMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/dashboard_text_secondary"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/taskStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="20dp"
+        android:layout_marginEnd="10dp"
+        android:gravity="center"
+        android:minWidth="52dp"
+        android:paddingHorizontal="6dp"
+        android:textSize="8sp"
+        android:textStyle="bold" />
+</LinearLayout>
