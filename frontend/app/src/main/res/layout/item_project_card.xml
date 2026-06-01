@@ -65,21 +65,9 @@
         android:textColor="@color/dashboard_text_secondary"
         android:textSize="14sp" />
 
-    <ProgressBar
-        android:id="@+id/projectProgressBar"
-        style="?android:attr/progressBarStyleHorizontal"
+    <FrameLayout
+        android:id="@+id/projectMembersAvatars"
         android:layout_width="match_parent"
-        android:layout_height="7dp"
-        android:layout_marginTop="14dp"
-        android:max="100"
-        android:progressDrawable="@drawable/bg_progress_red" />
-
-    <TextView
-        android:id="@+id/projectProgressText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textColor="@color/dashboard_text_secondary"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:layout_height="34dp"
+        android:layout_marginTop="14dp" />
 </LinearLayout>
