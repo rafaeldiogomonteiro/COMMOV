@@ -42,10 +42,25 @@ func (r *ProjectUserRepo) ListByUserID(ctx context.Context, userID int) ([]entit
 	return projectUsers, err
 }
 
+func (r *ProjectUserRepo) ExistsByProjectAndUser(ctx context.Context, projectID int, userID int) (bool, error) {
+	var count int64
+	err := r.DB.WithContext(ctx).
+		Model(&entity.ProjectUser{}).
+		Where("project_id = ? AND user_id = ?", projectID, userID).
+		Count(&count).Error
+
+	return count > 0, err
+}
+
 func (r *ProjectUserRepo) Update(ctx context.Context, projectUser *entity.ProjectUser) error {
 	return r.DB.WithContext(ctx).Save(projectUser).Error
 }
 
 func (r *ProjectUserRepo) Delete(ctx context.Context, projectUserID int) error {
 	return r.DB.WithContext(ctx).Delete(&entity.ProjectUser{}, "project_user_id = ?", projectUserID).Error
+}
+
+func (r *ProjectUserRepo) DeleteByProjectAndUser(ctx context.Context, projectID int, userID int) error {
+	return r.DB.WithContext(ctx).
+		Delete(&entity.ProjectUser{}, "project_id = ? AND user_id = ?", projectID, userID).Error
 }

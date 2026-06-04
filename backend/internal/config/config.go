@@ -22,8 +22,8 @@ func Load() Config {
 		AppEnv:          getEnv("APP_ENV", "development"),
 		HTTPAddr:        getEnv("HTTP_ADDR", ":8080"),
 		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/commov?sslmode=disable"),
-		DefaultUser:     getEnv("DEFAULT_USER", ""),
-		DefaultUserPass: getEnv("DEFAULT_USER_PASS", ""),
+		DefaultUser:     getEnv("DEFAULT_USER", "admin@commov.local"),
+		DefaultUserPass: getEnv("DEFAULT_USER_PASS", "admin123"),
 	}
 }
 

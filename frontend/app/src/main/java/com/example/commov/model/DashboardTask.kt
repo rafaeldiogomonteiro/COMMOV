@@ -12,5 +12,9 @@ data class DashboardTask(
     @ColorRes val accentColorResId: Int,
     @ColorRes val iconBackgroundColorResId: Int,
     @ColorRes val statusBackgroundColorResId: Int,
-    @ColorRes val statusTextColorResId: Int
+    @ColorRes val statusTextColorResId: Int,
+    val titleText: String? = null,
+    val metaText: String? = null,
+    val statusText: String? = null,
+    val taskId: Int = 0
 )

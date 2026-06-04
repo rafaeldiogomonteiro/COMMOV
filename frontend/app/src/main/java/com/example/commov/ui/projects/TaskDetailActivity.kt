@@ -5,9 +5,9 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import com.example.commov.data.local.LocaleHelper
-import com.example.commov.ui.compose.CreateTaskScreen
+import com.example.commov.ui.compose.TaskDetailScreen
 
-class CreateTaskActivity : AppCompatActivity() {
+class TaskDetailActivity : AppCompatActivity() {
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleHelper.applySavedLocale(newBase))
     }
@@ -15,15 +15,11 @@ class CreateTaskActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            CreateTaskScreen(
-                projectId = intent.getIntExtra(EXTRA_PROJECT_ID, 0),
-                projectName = intent.getStringExtra(EXTRA_PROJECT_NAME)
-            )
+            TaskDetailScreen(intent.getIntExtra(EXTRA_TASK_ID, 0))
         }
     }
 
     companion object {
-        const val EXTRA_PROJECT_ID = "projectId"
-        const val EXTRA_PROJECT_NAME = "projectName"
+        const val EXTRA_TASK_ID = "taskId"
     }
 }

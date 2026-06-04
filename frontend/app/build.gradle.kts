@@ -3,6 +3,23 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
+fun envValue(key: String, fallback: String): String {
+    val envFile = rootProject.file(".env")
+    if (!envFile.exists()) {
+        return fallback
+    }
+
+    val line = envFile.readLines()
+        .firstOrNull { it.trim().startsWith("$key=") }
+        ?: return fallback
+
+    return line.substringAfter("=")
+        .trim()
+        .trim('"')
+        .trim('\'')
+        .ifEmpty { fallback }
+}
+
 android {
     namespace = "com.example.commov"
     compileSdk = 36
@@ -15,6 +32,11 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"${envValue("API_BASE_URL", "http://10.0.2.2:8080")}\""
+        )
     }
 
     buildTypes {
@@ -35,6 +57,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.15"

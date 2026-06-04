@@ -9,9 +9,10 @@ data class Project(
     @StringRes val descriptionResId: Int,
     val initials: String,
     val taskCount: Int,
-    val progress: Int,
     val members: List<ProjectMember>,
     val tasks: List<ProjectTask>,
     @ColorRes val accentColorResId: Int,
-    @ColorRes val badgeColorResId: Int
+    @ColorRes val badgeColorResId: Int,
+    val nameText: String? = null,
+    val descriptionText: String? = null
 )

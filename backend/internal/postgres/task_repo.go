@@ -42,6 +42,15 @@ func (r *TaskRepo) ListByUserID(ctx context.Context, userID int) ([]entity.Task,
 	return tasks, err
 }
 
+func (r *TaskRepo) ListByProjectAndUserID(ctx context.Context, projectID int, userID int) ([]entity.Task, error) {
+	var tasks []entity.Task
+	err := r.DB.WithContext(ctx).
+		Where("project_id = ? AND user_id = ?", projectID, userID).
+		Find(&tasks).Error
+
+	return tasks, err
+}
+
 func (r *TaskRepo) Update(ctx context.Context, task *entity.Task) error {
 	return r.DB.WithContext(ctx).Save(task).Error
 }

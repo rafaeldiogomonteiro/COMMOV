@@ -30,6 +30,18 @@ func (r *ProjectRepo) List(ctx context.Context) ([]entity.Project, error) {
 	return projects, err
 }
 
+func (r *ProjectRepo) ListByUserID(ctx context.Context, userID int) ([]entity.Project, error) {
+	var projects []entity.Project
+	err := r.DB.WithContext(ctx).
+		Model(&entity.Project{}).
+		Joins("JOIN project_users ON project_users.project_id = projects.project_id").
+		Where("project_users.user_id = ?", userID).
+		Order("projects.project_id desc").
+		Find(&projects).Error
+
+	return projects, err
+}
+
 func (r *ProjectRepo) Update(ctx context.Context, project *entity.Project) error {
 	return r.DB.WithContext(ctx).Save(project).Error
 }

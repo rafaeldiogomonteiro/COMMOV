@@ -8,9 +8,11 @@ import (
 )
 
 type Dependencies struct {
-	Logger     *log.Logger
-	AuthRouter *AuthRouter
-	UserRouter *UserRouter
+	Logger        *log.Logger
+	AuthRouter    *AuthRouter
+	UserRouter    *UserRouter
+	ProjectRouter *ProjectRouter
+	TaskRouter    *TaskRouter
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -22,6 +24,8 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	deps.AuthRouter.Register(r)
 	deps.UserRouter.Register(r)
+	deps.ProjectRouter.Register(r)
+	deps.TaskRouter.Register(r)
 
 	return requestLogger(deps.Logger, r)
 }

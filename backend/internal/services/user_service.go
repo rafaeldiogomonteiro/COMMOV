@@ -17,6 +17,7 @@ var (
 	ErrForbidden    = errors.New("forbidden")
 	ErrValidation   = errors.New("validation error")
 	ErrConflict     = errors.New("conflict")
+	ErrNotFound     = errors.New("not found")
 )
 
 type UserService struct {
@@ -37,6 +38,13 @@ func (s *UserService) EnsureDefaultUser(ctx context.Context, defaultUser string,
 
 	user, err := s.UserRepo.GetByEmail(ctx, defaultUser)
 	if err == nil {
+		if user.Role != entity.UserRoleAdmin || !user.Active {
+			user.Role = entity.UserRoleAdmin
+			user.Active = true
+			if err := s.UserRepo.Update(ctx, user); err != nil {
+				return nil, false, fmt.Errorf("update default user: %w", err)
+			}
+		}
 		return user, false, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -74,6 +82,13 @@ func (s *UserService) EnsureDefaultUser(ctx context.Context, defaultUser string,
 	}
 	if err := s.UserRepo.Create(ctx, user); err != nil {
 		if existingUser, getErr := s.UserRepo.GetByEmail(ctx, defaultUser); getErr == nil {
+			if existingUser.Role != entity.UserRoleAdmin || !existingUser.Active {
+				existingUser.Role = entity.UserRoleAdmin
+				existingUser.Active = true
+				if updateErr := s.UserRepo.Update(ctx, existingUser); updateErr != nil {
+					return nil, false, fmt.Errorf("update default user: %w", updateErr)
+				}
+			}
 			return existingUser, false, nil
 		}
 		return nil, false, fmt.Errorf("create default user: %w", err)
@@ -228,4 +243,8 @@ func validationError(message string) error {
 
 func conflictError(message string) error {
 	return fmt.Errorf("%w: %s", ErrConflict, message)
+}
+
+func notFoundError(message string) error {
+	return fmt.Errorf("%w: %s", ErrNotFound, message)
 }

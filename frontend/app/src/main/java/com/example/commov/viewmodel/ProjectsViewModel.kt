@@ -1,158 +1,213 @@
 package com.example.commov.viewmodel
 
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import com.example.commov.R
+import com.example.commov.data.local.SessionManager
+import com.example.commov.data.remote.ApiProject
+import com.example.commov.data.remote.ApiTask
+import com.example.commov.data.remote.ApiUser
+import com.example.commov.data.remote.ProjectsApi
+import com.example.commov.data.remote.ProjectsResult
 import com.example.commov.model.DashboardTask
 import com.example.commov.model.Project
 import com.example.commov.model.ProjectMember
 import com.example.commov.model.ProjectTask
+import java.util.Locale
 
-class ProjectsViewModel {
-    val state: ProjectsUiState
-        get() = ProjectsUiState(
-            listOf(
-                Project(
-                    projectId = 1,
-                    nameResId = R.string.project_alpha_name,
-                    descriptionResId = R.string.project_alpha_description,
-                    initials = "AP",
-                    taskCount = 12,
-                    progress = 72,
-                    members = listOf(
-                        member("Ricardo Silva", "RS", R.color.bottom_nav_selected),
-                        member("Ana Costa", "AC", R.color.project_green),
-                        member("Marta Reis", "MR", R.color.task_orange),
-                        member("Joao Lima", "JL", R.color.project_purple)
-                    ),
-                    tasks = listOf(
-                        ProjectTask(
-                            task(
-                                R.string.task_code_review_title,
-                                R.string.task_code_review_meta,
-                                R.string.task_status_expired,
-                                R.drawable.ic_alert_triangle,
-                                R.color.task_red,
-                                R.color.task_red_soft,
-                                R.color.task_red_soft,
-                                R.color.task_red
-                            ),
-                            listOf(
-                                member("Ricardo Silva", "RS", R.color.bottom_nav_selected),
-                                member("Ana Costa", "AC", R.color.project_green)
-                            )
-                        ),
-                        ProjectTask(
-                            task(
-                                R.string.task_api_docs_title,
-                                R.string.task_api_docs_meta,
-                                R.string.task_status_soon,
-                                R.drawable.ic_clock,
-                                R.color.task_orange,
-                                R.color.task_orange_soft,
-                                R.color.task_orange_soft,
-                                R.color.task_orange
-                            ),
-                            listOf(
-                                member("Joao Lima", "JL", R.color.project_purple),
-                                member("Ricardo Silva", "RS", R.color.bottom_nav_selected)
-                            )
-                        ),
-                        ProjectTask(
-                            task(
-                                R.string.task_alignment_title,
-                                R.string.task_alignment_meta,
-                                R.string.task_status_pending,
-                                R.drawable.ic_document,
-                                R.color.task_blue,
-                                R.color.task_blue_soft,
-                                R.color.task_status_gray_bg,
-                                R.color.task_status_gray_text
-                            ),
-                            listOf(
-                                member("Marta Reis", "MR", R.color.task_orange),
-                                member("Ana Costa", "AC", R.color.project_green),
-                                member("Joao Lima", "JL", R.color.project_purple)
-                            )
+class ProjectsViewModel(
+    context: Context,
+    private val projectsApi: ProjectsApi = ProjectsApi(),
+    private val sessionManager: SessionManager = SessionManager(context.applicationContext)
+) {
+    fun interface StateObserver {
+        fun onStateChanged(state: ProjectsUiState)
+    }
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var observer: StateObserver? = null
+    private var state = ProjectsUiState(
+        projects = emptyList(),
+        canCreateTasks = sessionManager.canManageProjects(),
+        requiresLogin = false
+    )
+
+    fun observe(observer: StateObserver) {
+        this.observer = observer
+        publish()
+        refresh()
+    }
+
+    private fun refresh() {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            state = state.copy(requiresLogin = true)
+            publish()
+            return
+        }
+
+        Thread {
+            val result = projectsApi.projects(token)
+            mainHandler.post {
+                when (result) {
+                    is ProjectsResult.Success -> {
+                        state = state.copy(
+                            projects = result.projects.mapIndexed { index, project -> project.toProject(index) },
+                            canCreateTasks = sessionManager.canManageProjects(),
+                            requiresLogin = false
                         )
-                    ),
-                    accentColorResId = R.color.bottom_nav_selected,
-                    badgeColorResId = R.color.task_blue_soft
-                ),
-                Project(
-                    projectId = 2,
-                    nameResId = R.string.project_infrastructure_name,
-                    descriptionResId = R.string.project_infrastructure_description,
-                    initials = "IN",
-                    taskCount = 8,
-                    progress = 45,
-                    members = listOf(
-                        member("Bruno Alves", "BA", R.color.project_green),
-                        member("Sofia Pinto", "SP", R.color.task_blue),
-                        member("Tiago Sousa", "TS", R.color.task_status_gray_text)
-                    ),
-                    tasks = emptyList(),
-                    accentColorResId = R.color.project_green,
-                    badgeColorResId = R.color.project_green_soft
-                ),
-                Project(
-                    projectId = 3,
-                    nameResId = R.string.project_marketing_name,
-                    descriptionResId = R.string.project_marketing_description,
-                    initials = "MK",
-                    taskCount = 6,
-                    progress = 63,
-                    members = listOf(
-                        member("Marta Reis", "MR", R.color.task_orange),
-                        member("Ana Costa", "AC", R.color.bottom_nav_selected),
-                        member("Nuno Rocha", "NR", R.color.project_purple)
-                    ),
-                    tasks = emptyList(),
-                    accentColorResId = R.color.task_orange,
-                    badgeColorResId = R.color.task_orange_soft
-                ),
-                Project(
-                    projectId = 4,
-                    nameResId = R.string.project_product_name,
-                    descriptionResId = R.string.project_product_description,
-                    initials = "PD",
-                    taskCount = 10,
-                    progress = 38,
-                    members = listOf(
-                        member("Joao Lima", "JL", R.color.project_purple),
-                        member("Sofia Pinto", "SP", R.color.project_green),
-                        member("Ricardo Silva", "RS", R.color.bottom_nav_selected),
-                        member("Bruno Alves", "BA", R.color.task_orange),
-                        member("Nuno Rocha", "NR", R.color.task_status_gray_text)
-                    ),
-                    tasks = emptyList(),
-                    accentColorResId = R.color.project_purple,
-                    badgeColorResId = R.color.project_purple_soft
+                    }
+                    ProjectsResult.Unauthorized -> {
+                        sessionManager.clear()
+                        state = state.copy(requiresLogin = true)
+                    }
+                    ProjectsResult.NetworkError,
+                    is ProjectsResult.ServerError -> {
+                        state = state.copy(requiresLogin = false)
+                    }
+                }
+                publish()
+            }
+        }.start()
+    }
+
+    private fun publish() {
+        observer?.onStateChanged(state)
+    }
+
+    private fun ApiProject.toProject(index: Int): Project {
+        val colors = projectColors(index)
+        val projectMembers = members.mapIndexed { memberIndex, user -> user.toProjectMember(memberIndex) }
+        val membersByUserId = members.mapIndexed { memberIndex, user ->
+            user.userId to user.toProjectMember(memberIndex)
+        }.toMap()
+
+        return Project(
+            projectId = projectId,
+            nameResId = 0,
+            descriptionResId = 0,
+            initials = initials(name),
+            taskCount = tasks.size,
+            members = projectMembers,
+            tasks = tasks.map { task ->
+                ProjectTask(
+                    task = task.toDashboardTask(name),
+                    assignees = listOfNotNull(membersByUserId[task.userId])
                 )
+            },
+            accentColorResId = colors.accentColorResId,
+            badgeColorResId = colors.badgeColorResId,
+            nameText = name,
+            descriptionText = description
+        )
+    }
+
+    private fun ApiUser.toProjectMember(index: Int): ProjectMember {
+        return ProjectMember(
+            name = name,
+            initials = initials(name),
+            avatarColorResId = avatarColor(index)
+        )
+    }
+
+    private fun ApiTask.toDashboardTask(projectName: String): DashboardTask {
+        val normalizedStatus = status.lowercase(Locale.getDefault())
+        val style = when (normalizedStatus) {
+            "completed" -> TaskStyle(
+                status = "completed",
+                iconResId = R.drawable.ic_check_circle,
+                accentColorResId = R.color.project_green,
+                iconBackgroundColorResId = R.color.project_green_soft,
+                statusBackgroundColorResId = R.color.project_green_soft,
+                statusTextColorResId = R.color.project_green
             )
-        )
+            "blocked" -> TaskStyle(
+                status = "blocked",
+                iconResId = R.drawable.ic_alert_triangle,
+                accentColorResId = R.color.task_red,
+                iconBackgroundColorResId = R.color.task_red_soft,
+                statusBackgroundColorResId = R.color.task_red_soft,
+                statusTextColorResId = R.color.task_red
+            )
+            "in_progress" -> TaskStyle(
+                status = "in progress",
+                iconResId = R.drawable.ic_clock,
+                accentColorResId = R.color.task_orange,
+                iconBackgroundColorResId = R.color.task_orange_soft,
+                statusBackgroundColorResId = R.color.task_orange_soft,
+                statusTextColorResId = R.color.task_orange
+            )
+            else -> TaskStyle(
+                status = "pending",
+                iconResId = R.drawable.ic_document,
+                accentColorResId = R.color.task_blue,
+                iconBackgroundColorResId = R.color.task_blue_soft,
+                statusBackgroundColorResId = R.color.task_status_gray_bg,
+                statusTextColorResId = R.color.task_status_gray_text
+            )
+        }
 
-    private fun member(name: String, initials: String, avatarColorResId: Int): ProjectMember {
-        return ProjectMember(name, initials, avatarColorResId)
-    }
-
-    private fun task(
-        titleResId: Int,
-        metaResId: Int,
-        statusResId: Int,
-        iconResId: Int,
-        accentColorResId: Int,
-        iconBackgroundColorResId: Int,
-        statusBackgroundColorResId: Int,
-        statusTextColorResId: Int
-    ): DashboardTask {
         return DashboardTask(
-            titleResId,
-            metaResId,
-            statusResId,
-            iconResId,
-            accentColorResId,
-            iconBackgroundColorResId,
-            statusBackgroundColorResId,
-            statusTextColorResId
+            titleResId = 0,
+            metaResId = 0,
+            statusResId = 0,
+            iconResId = style.iconResId,
+            accentColorResId = style.accentColorResId,
+            iconBackgroundColorResId = style.iconBackgroundColorResId,
+            statusBackgroundColorResId = style.statusBackgroundColorResId,
+            statusTextColorResId = style.statusTextColorResId,
+            titleText = title,
+            metaText = taskMeta(projectName, estimatedEndDate),
+            statusText = style.status,
+            taskId = taskId
         )
     }
+
+    private fun taskMeta(projectName: String, estimatedEndDate: String?): String {
+        val dueDate = estimatedEndDate?.take(10)?.takeIf { it.isNotBlank() }
+        return if (dueDate == null) projectName else "$projectName • $dueDate"
+    }
+
+    private fun initials(name: String): String {
+        return name
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .take(2)
+            .joinToString("") { it.first().uppercase() }
+            .ifBlank { "PR" }
+    }
+
+    private fun projectColors(index: Int): ProjectColors {
+        return when (index % 4) {
+            0 -> ProjectColors(R.color.bottom_nav_selected, R.color.task_blue_soft)
+            1 -> ProjectColors(R.color.project_green, R.color.project_green_soft)
+            2 -> ProjectColors(R.color.task_orange, R.color.task_orange_soft)
+            else -> ProjectColors(R.color.project_purple, R.color.project_purple_soft)
+        }
+    }
+
+    private fun avatarColor(index: Int): Int {
+        return when (index % 5) {
+            0 -> R.color.bottom_nav_selected
+            1 -> R.color.project_green
+            2 -> R.color.task_orange
+            3 -> R.color.project_purple
+            else -> R.color.task_status_gray_text
+        }
+    }
+
+    private data class ProjectColors(
+        val accentColorResId: Int,
+        val badgeColorResId: Int
+    )
+
+    private data class TaskStyle(
+        val status: String,
+        val iconResId: Int,
+        val accentColorResId: Int,
+        val iconBackgroundColorResId: Int,
+        val statusBackgroundColorResId: Int,
+        val statusTextColorResId: Int
+    )
 }

@@ -8,5 +8,7 @@ data class LoginUiState(
     val passwordVisible: Boolean,
     @StringRes val emailErrorResId: Int,
     @StringRes val passwordErrorResId: Int,
+    @StringRes val generalErrorResId: Int,
+    val isLoading: Boolean,
     val loginAccepted: Boolean
 )

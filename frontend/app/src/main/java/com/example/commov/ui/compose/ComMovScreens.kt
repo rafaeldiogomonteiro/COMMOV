@@ -6,6 +6,8 @@ import android.app.DatePickerDialog
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.widget.LinearLayout
 import android.widget.NumberPicker
 import android.widget.Toast
@@ -70,18 +72,39 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.commov.MainActivity
 import com.example.commov.R
+import com.example.commov.data.local.SessionManager
 import com.example.commov.data.local.LocaleHelper
+import com.example.commov.data.remote.AdminApi
+import com.example.commov.data.remote.AdminMutationResult
+import com.example.commov.data.remote.AdminUsersResult
+import com.example.commov.data.remote.ApiTask
+import com.example.commov.data.remote.ApiUser
+import com.example.commov.data.remote.CreateUserInput
+import com.example.commov.data.remote.CreateProjectInput
+import com.example.commov.data.remote.CreateProjectResult
+import com.example.commov.data.remote.CreateTaskInput as RemoteCreateTaskInput
+import com.example.commov.data.remote.CreateTaskResult
+import com.example.commov.data.remote.ProjectsApi
+import com.example.commov.data.remote.TaskApi
+import com.example.commov.data.remote.TaskMutationResult
+import com.example.commov.data.remote.TaskResult
+import com.example.commov.data.remote.UsersResult
 import com.example.commov.model.DashboardTask
 import com.example.commov.model.Project
 import com.example.commov.model.ProjectMember
 import com.example.commov.model.ProjectTask
+import com.example.commov.ui.admin.AdminActivity
 import com.example.commov.ui.dashboard.DashboardActivity
+import com.example.commov.ui.projects.CreateProjectActivity
 import com.example.commov.ui.projects.CreateTaskActivity
 import com.example.commov.ui.projects.ProjectsActivity
+import com.example.commov.ui.projects.TaskDetailActivity
 import com.example.commov.ui.settings.SettingsActivity
+import com.example.commov.viewmodel.DashboardUiState
 import com.example.commov.viewmodel.DashboardViewModel
 import com.example.commov.viewmodel.LoginUiState
 import com.example.commov.viewmodel.LoginViewModel
+import com.example.commov.viewmodel.ProjectsUiState
 import com.example.commov.viewmodel.ProjectsViewModel
 import com.example.commov.viewmodel.SettingsViewModel
 import java.util.Calendar
@@ -90,6 +113,7 @@ import java.util.Locale
 enum class Destination {
     HOME,
     PROJECTS,
+    ADMIN,
     SETTINGS
 }
 
@@ -97,8 +121,8 @@ enum class Destination {
 fun LoginScreen() {
     val context = LocalContext.current
     val activity = context.findActivity()
-    val viewModel = remember { LoginViewModel() }
-    var state by remember { mutableStateOf(LoginUiState("", "", false, 0, 0, false)) }
+    val viewModel = remember { LoginViewModel(context.applicationContext) }
+    var state by remember { mutableStateOf(LoginUiState("", "", false, 0, 0, 0, false, false)) }
 
     DisposableEffect(viewModel) {
         viewModel.observe { state = it }
@@ -210,8 +234,9 @@ fun LoginScreen() {
                 modifier = Modifier.padding(top = 6.dp)
             )
             ErrorText(state.passwordErrorResId)
+            ErrorText(state.generalErrorResId)
             FilledActionButton(
-                text = stringResource(R.string.login_button),
+                text = stringResource(if (state.isLoading) R.string.login_loading else R.string.login_button),
                 iconResId = R.drawable.ic_arrow_right,
                 colorResId = R.color.login_button,
                 radius = 6.dp,
@@ -219,7 +244,11 @@ fun LoginScreen() {
                     .fillMaxWidth()
                     .padding(top = 24.dp)
                     .height(48.dp),
-                onClick = viewModel::onLoginClicked
+                onClick = {
+                    if (!state.isLoading) {
+                        viewModel.onLoginClicked()
+                    }
+                }
             )
         }
     }
@@ -227,7 +256,34 @@ fun LoginScreen() {
 
 @Composable
 fun DashboardScreen() {
-    val state = remember { DashboardViewModel().state }
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val viewModel = remember { DashboardViewModel(context.applicationContext) }
+    var state by remember {
+        mutableStateOf(
+            DashboardUiState(
+                userName = "",
+                pendingTasks = 0,
+                completedTasks = 0,
+                pendingProgress = 0,
+                completedProgress = 0,
+                tasks = emptyList(),
+                requiresLogin = false
+            )
+        )
+    }
+
+    DisposableEffect(viewModel) {
+        viewModel.observe { state = it }
+        onDispose { }
+    }
+
+    LaunchedEffect(state.requiresLogin) {
+        if (state.requiresLogin) {
+            activity.startActivity(Intent(activity, MainActivity::class.java))
+            activity.finish()
+        }
+    }
 
     AppScaffold(selectedDestination = Destination.HOME) {
         Column(
@@ -302,7 +358,14 @@ fun DashboardScreen() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(66.dp)
-                            .padding(bottom = 8.dp)
+                            .padding(bottom = 8.dp),
+                        onClick = {
+                            if (task.taskId > 0) {
+                                val intent = Intent(context, TaskDetailActivity::class.java)
+                                intent.putExtra(TaskDetailActivity.EXTRA_TASK_ID, task.taskId)
+                                context.startActivity(intent)
+                            }
+                        }
                     )
                 }
             }
@@ -313,9 +376,31 @@ fun DashboardScreen() {
 @Composable
 fun ProjectsScreen() {
     val context = LocalContext.current
-    val state = remember { ProjectsViewModel().state }
-    var selectedProject by remember { mutableStateOf<Project?>(null) }
-    val project = selectedProject
+    val activity = context.findActivity()
+    val viewModel = remember { ProjectsViewModel(context.applicationContext) }
+    var state by remember {
+        mutableStateOf(
+            ProjectsUiState(
+                projects = emptyList(),
+                canCreateTasks = false,
+                requiresLogin = false
+            )
+        )
+    }
+    var selectedProjectId by remember { mutableStateOf<Int?>(null) }
+    val project = state.projects.firstOrNull { it.projectId == selectedProjectId }
+
+    DisposableEffect(viewModel) {
+        viewModel.observe { state = it }
+        onDispose { }
+    }
+
+    LaunchedEffect(state.requiresLogin) {
+        if (state.requiresLogin) {
+            activity.startActivity(Intent(activity, MainActivity::class.java))
+            activity.finish()
+        }
+    }
 
     AppScaffold(selectedDestination = Destination.PROJECTS) {
         Column(
@@ -328,7 +413,7 @@ fun ProjectsScreen() {
                 text = if (project == null) {
                     stringResource(R.string.projects_title)
                 } else {
-                    stringResource(project.nameResId)
+                    project.nameText ?: stringResource(project.nameResId)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 color = colorResource(R.color.dashboard_text_primary),
@@ -339,7 +424,7 @@ fun ProjectsScreen() {
                 text = if (project == null) {
                     stringResource(R.string.projects_subtitle)
                 } else {
-                    stringResource(project.descriptionResId)
+                    project.descriptionText ?: stringResource(project.descriptionResId)
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -354,17 +439,27 @@ fun ProjectsScreen() {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (project == null) {
-                    state.projects.forEachIndexed { index, item ->
+                    if (state.canCreateTasks) {
+                        FilledActionButton(
+                            text = stringResource(R.string.project_create_project),
+                            colorResId = R.color.login_button,
+                            radius = 6.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 14.dp)
+                                .height(46.dp),
+                            onClick = {
+                                context.startActivity(Intent(context, CreateProjectActivity::class.java))
+                            }
+                        )
+                    }
+                    state.projects.forEach { item ->
                         ProjectCard(
                             project = item,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 14.dp),
-                            onClick = if (index == 0) {
-                                { selectedProject = item }
-                            } else {
-                                null
-                            }
+                            onClick = { selectedProjectId = item.projectId }
                         )
                     }
                 } else {
@@ -373,26 +468,31 @@ fun ProjectsScreen() {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(36.dp)
-                            .clickable { selectedProject = null },
+                            .clickable { selectedProjectId = null },
                         color = colorResource(R.color.bottom_nav_selected),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    FilledActionButton(
-                        text = stringResource(R.string.project_create_task),
-                        colorResId = R.color.login_button,
-                        radius = 6.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp, bottom = 8.dp)
-                            .height(46.dp),
-                        onClick = {
-                            val intent = Intent(context, CreateTaskActivity::class.java)
-                            intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_ID, project.projectId)
-                            intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_NAME, context.getString(project.nameResId))
-                            context.startActivity(intent)
-                        }
-                    )
+                    if (state.canCreateTasks) {
+                        FilledActionButton(
+                            text = stringResource(R.string.project_create_task),
+                            colorResId = R.color.login_button,
+                            radius = 6.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp, bottom = 8.dp)
+                                .height(46.dp),
+                            onClick = {
+                                val intent = Intent(context, CreateTaskActivity::class.java)
+                                intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_ID, project.projectId)
+                                intent.putExtra(
+                                    CreateTaskActivity.EXTRA_PROJECT_NAME,
+                                    project.nameText ?: context.getString(project.nameResId)
+                                )
+                                context.startActivity(intent)
+                            }
+                        )
+                    }
                     SectionTitle(R.string.project_detail_tasks, topPadding = 18.dp)
                     project.tasks.forEach { task ->
                         ProjectTaskCard(
@@ -400,7 +500,14 @@ fun ProjectsScreen() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(112.dp)
-                                .padding(bottom = 10.dp)
+                                .padding(bottom = 10.dp),
+                            onClick = {
+                                if (task.task.taskId > 0) {
+                                    val intent = Intent(context, TaskDetailActivity::class.java)
+                                    intent.putExtra(TaskDetailActivity.EXTRA_TASK_ID, task.task.taskId)
+                                    context.startActivity(intent)
+                                }
+                            }
                         )
                     }
                     SectionTitle(R.string.project_detail_people, topPadding = 16.dp)
@@ -420,25 +527,294 @@ fun ProjectsScreen() {
 }
 
 @Composable
-fun CreateTaskScreen(projectName: String?) {
+fun CreateProjectScreen() {
     val context = LocalContext.current
     val activity = context.findActivity()
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val projectsApi = remember { ProjectsApi() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val currentUser = remember { sessionManager.currentUser() }
+    var users by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
+    var usersLoaded by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var managerLabel by remember { mutableStateOf("") }
+    var startDate by remember { mutableStateOf("") }
+    var estimatedEndDate by remember { mutableStateOf("") }
+    var memberIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var requiredError by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            activity.startActivity(Intent(activity, MainActivity::class.java))
+            activity.finish()
+            return@LaunchedEffect
+        }
+
+        Thread {
+            val result = projectsApi.users(token)
+            mainHandler.post {
+                when (result) {
+                    is UsersResult.Success -> {
+                        users = result.users
+                        val preferredManager = result.users.firstOrNull { it.userId == currentUser?.userId }
+                            ?: result.users.firstOrNull { it.canManageProjects() }
+                        managerLabel = preferredManager?.label().orEmpty()
+                    }
+                    UsersResult.Unauthorized -> {
+                        sessionManager.clear()
+                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                        activity.finish()
+                    }
+                    UsersResult.NetworkError,
+                    is UsersResult.ServerError -> {
+                        managerLabel = currentUser?.name.orEmpty()
+                    }
+                }
+                usersLoaded = true
+            }
+        }.start()
+    }
+
+    val managerOptions = users.filter { it.canManageProjects() }.map { it.label() }
+
+    AppScaffold(selectedDestination = Destination.PROJECTS) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 18.dp, top = 56.dp, end = 18.dp, bottom = 24.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.create_project_title),
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            CreateTaskLabel(R.string.create_project_name)
+            CreateTaskInput(
+                value = name,
+                onValueChange = {
+                    name = it
+                    requiredError = false
+                },
+                singleLine = true,
+                keyboardType = KeyboardType.Text
+            )
+            CreateTaskLabel(R.string.create_project_description)
+            CreateTaskInput(
+                value = description,
+                onValueChange = { description = it },
+                minHeight = 92.dp,
+                singleLine = false
+            )
+            CreateTaskLabel(R.string.create_project_manager)
+            if (managerOptions.isEmpty()) {
+                Text(
+                    text = if (usersLoaded) {
+                        stringResource(R.string.create_project_no_users)
+                    } else {
+                        ""
+                    },
+                    modifier = Modifier.padding(top = 6.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 13.sp
+                )
+            } else {
+                SelectInput(
+                    selected = managerLabel.ifBlank { managerOptions.first() },
+                    values = managerOptions,
+                    onSelected = { managerLabel = it }
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    CreateTaskLabelNoTop(R.string.create_project_start_date)
+                    PickerInput(
+                        value = startDate,
+                        hint = stringResource(R.string.create_task_date_hint),
+                        iconResId = R.drawable.ic_calendar_clock,
+                        onClick = { showDatePicker(context) { startDate = it } }
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    CreateTaskLabelNoTop(R.string.create_project_estimated_end_date)
+                    PickerInput(
+                        value = estimatedEndDate,
+                        hint = stringResource(R.string.create_task_date_hint),
+                        iconResId = R.drawable.ic_calendar_clock,
+                        onClick = { showDatePicker(context) { estimatedEndDate = it } }
+                    )
+                }
+            }
+            if (users.isNotEmpty()) {
+                CreateTaskLabel(R.string.create_project_members)
+                users.forEach { user ->
+                    val selected = memberIds.contains(user.userId)
+                    SelectableMemberRow(
+                        user = user,
+                        selected = selected,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .padding(top = 8.dp),
+                        onClick = {
+                            memberIds = if (selected) {
+                                memberIds - user.userId
+                            } else {
+                                memberIds + user.userId
+                            }
+                        }
+                    )
+                }
+            }
+
+            if (requiredError) {
+                Text(
+                    text = stringResource(R.string.create_project_required_error),
+                    modifier = Modifier.padding(top = 12.dp),
+                    color = colorResource(R.color.login_error),
+                    fontSize = 12.sp
+                )
+            }
+
+            FilledActionButton(
+                text = stringResource(R.string.create_project_save),
+                colorResId = R.color.login_button,
+                radius = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp)
+                    .height(48.dp),
+                onClick = {
+                    if (isSaving) {
+                        return@FilledActionButton
+                    }
+                    if (name.trim().isEmpty() || startDate.isBlank() || estimatedEndDate.isBlank()) {
+                        requiredError = true
+                        return@FilledActionButton
+                    }
+
+                    val token = sessionManager.token()
+                    if (token.isNullOrBlank()) {
+                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                        activity.finish()
+                        return@FilledActionButton
+                    }
+
+                    val managerId = users.firstOrNull { it.label() == managerLabel }?.userId
+                        ?: currentUser?.userId
+                        ?: 0
+                    isSaving = true
+                    Thread {
+                        val result = projectsApi.createProject(
+                            token,
+                            CreateProjectInput(
+                                name = name.trim(),
+                                description = description.trim(),
+                                managerId = managerId,
+                                startDate = startDate,
+                                estimatedEndDate = estimatedEndDate,
+                                memberIds = memberIds.toList()
+                            )
+                        )
+                        mainHandler.post {
+                            isSaving = false
+                            when (result) {
+                                CreateProjectResult.Success -> {
+                                    Toast.makeText(context, R.string.create_project_saved, Toast.LENGTH_LONG).show()
+                                    activity.startActivity(Intent(activity, ProjectsActivity::class.java))
+                                    activity.finish()
+                                }
+                                CreateProjectResult.Unauthorized -> {
+                                    sessionManager.clear()
+                                    activity.startActivity(Intent(activity, MainActivity::class.java))
+                                    activity.finish()
+                                }
+                                CreateProjectResult.NetworkError,
+                                is CreateProjectResult.ServerError -> {
+                                    Toast.makeText(context, R.string.create_project_error, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }.start()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun CreateTaskScreen(projectId: Int, projectName: String?) {
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val projectsApi = remember { ProjectsApi() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val resolvedProjectName = projectName?.takeIf { it.trim().isNotEmpty() }
         ?: stringResource(R.string.project_alpha_name)
+    var assignees by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
+    var assigneesLoaded by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var assignee by remember { mutableStateOf("Ricardo Silva") }
-    var status by remember { mutableStateOf("pending") }
+    var assigneeLabel by remember { mutableStateOf("") }
     var estimatedEndDate by remember { mutableStateOf("") }
-    var workDate by remember { mutableStateOf("") }
-    var actualEndDate by remember { mutableStateOf("") }
     var estimatedTime by remember { mutableStateOf("") }
-    var completionRate by remember { mutableStateOf("") }
-    var timeSpent by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
-    var observation by remember { mutableStateOf("") }
-    var photo by remember { mutableStateOf("") }
-    var titleError by remember { mutableStateOf(false) }
+    var requiredError by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+
+    LaunchedEffect(projectId) {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank() || projectId <= 0) {
+            activity.startActivity(Intent(activity, MainActivity::class.java))
+            activity.finish()
+            return@LaunchedEffect
+        }
+
+        Thread {
+            val result = projectsApi.projectUsers(token, projectId)
+            mainHandler.post {
+                when (result) {
+                    is UsersResult.Success -> {
+                        assignees = result.users
+                        assigneeLabel = result.users.firstOrNull()?.label().orEmpty()
+                    }
+                    UsersResult.Unauthorized -> {
+                        sessionManager.clear()
+                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                        activity.finish()
+                    }
+                    UsersResult.NetworkError,
+                    is UsersResult.ServerError -> {
+                        Thread {
+                            val fallback = projectsApi.users(token)
+                            mainHandler.post {
+                                when (fallback) {
+                                    is UsersResult.Success -> {
+                                        assignees = fallback.users
+                                        assigneeLabel = fallback.users.firstOrNull()?.label().orEmpty()
+                                    }
+                                    else -> Toast.makeText(context, R.string.create_task_members_error, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }.start()
+                    }
+                }
+                assigneesLoaded = true
+            }
+        }.start()
+    }
 
     AppScaffold(selectedDestination = Destination.PROJECTS) {
         Column(
@@ -467,31 +843,33 @@ fun CreateTaskScreen(projectName: String?) {
                 value = title,
                 onValueChange = {
                     title = it
-                    titleError = false
+                    requiredError = false
                 },
                 singleLine = true,
                 keyboardType = KeyboardType.Text
             )
-            if (titleError) {
+            CreateTaskLabel(R.string.create_task_user)
+            if (assignees.isEmpty()) {
                 Text(
-                    text = stringResource(R.string.create_task_title_error),
-                    modifier = Modifier.padding(top = 4.dp),
-                    color = colorResource(R.color.login_error),
-                    fontSize = 12.sp
+                    text = if (assigneesLoaded) {
+                        stringResource(R.string.create_task_members_error)
+                    } else {
+                        ""
+                    },
+                    modifier = Modifier.padding(top = 6.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 13.sp
+                )
+            } else {
+                SelectInput(
+                    selected = assigneeLabel.ifBlank { assignees.first().label() },
+                    values = assignees.map { it.label() },
+                    onSelected = {
+                        assigneeLabel = it
+                        requiredError = false
+                    }
                 )
             }
-            CreateTaskLabel(R.string.create_task_user)
-            SelectInput(
-                selected = assignee,
-                values = listOf("Ricardo Silva", "Ana Costa", "Marta Reis", "Joao Lima"),
-                onSelected = { assignee = it }
-            )
-            CreateTaskLabel(R.string.create_task_status)
-            SelectInput(
-                selected = status,
-                values = listOf("pending", "in_progress", "completed", "blocked"),
-                onSelected = { status = it }
-            )
             CreateTaskLabel(R.string.create_task_description)
             CreateTaskInput(
                 value = description,
@@ -499,86 +877,30 @@ fun CreateTaskScreen(projectName: String?) {
                 minHeight = 92.dp,
                 singleLine = false
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column(Modifier.weight(1f)) {
-                    CreateTaskLabelNoTop(R.string.create_task_estimated_end_date)
-                    PickerInput(
-                        value = estimatedEndDate,
-                        hint = stringResource(R.string.create_task_date_hint),
-                        iconResId = R.drawable.ic_calendar_clock,
-                        onClick = { showDatePicker(context) { estimatedEndDate = it } }
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    CreateTaskLabelNoTop(R.string.create_task_work_date)
-                    PickerInput(
-                        value = workDate,
-                        hint = stringResource(R.string.create_task_date_hint),
-                        iconResId = R.drawable.ic_calendar_clock,
-                        onClick = { showDatePicker(context) { workDate = it } }
-                    )
-                }
-            }
-            CreateTaskLabel(R.string.create_task_actual_end_date)
+            CreateTaskLabel(R.string.create_task_estimated_end_date)
             PickerInput(
-                value = actualEndDate,
+                value = estimatedEndDate,
                 hint = stringResource(R.string.create_task_date_hint),
                 iconResId = R.drawable.ic_calendar_clock,
-                onClick = { showDatePicker(context) { actualEndDate = it } }
+                onClick = { showDatePicker(context) { estimatedEndDate = it } }
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column(Modifier.weight(1f)) {
-                    CreateTaskLabelNoTop(R.string.create_task_estimated_time)
-                    PickerInput(
-                        value = estimatedTime,
-                        hint = stringResource(R.string.create_task_number_hint),
-                        iconResId = R.drawable.ic_clock,
-                        onClick = { showTimePicker(context) { estimatedTime = it } }
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    CreateTaskLabelNoTop(R.string.create_task_completion_rate)
-                    PickerInput(
-                        value = completionRate,
-                        hint = stringResource(R.string.create_task_number_hint),
-                        iconResId = R.drawable.ic_check_circle,
-                        onClick = { showCompletionPicker(context) { completionRate = it } }
-                    )
-                }
-            }
-            CreateTaskLabel(R.string.create_task_time_spent)
-            PickerInput(
-                value = timeSpent,
-                hint = stringResource(R.string.create_task_number_hint),
-                iconResId = R.drawable.ic_clock,
-                onClick = { showTimePicker(context) { timeSpent = it } }
+            CreateTaskLabel(R.string.create_task_estimated_time)
+            CreateTaskInput(
+                value = estimatedTime,
+                onValueChange = { estimatedTime = it },
+                singleLine = true,
+                keyboardType = KeyboardType.Number
             )
             CreateTaskLabel(R.string.create_task_location)
             CreateTaskInput(value = location, onValueChange = { location = it }, singleLine = true)
-            CreateTaskLabel(R.string.create_task_observation)
-            CreateTaskInput(
-                value = observation,
-                onValueChange = { observation = it },
-                minHeight = 82.dp,
-                singleLine = false
-            )
-            CreateTaskLabel(R.string.create_task_photo)
-            CreateTaskInput(
-                value = photo,
-                onValueChange = { photo = it },
-                singleLine = true,
-                keyboardType = KeyboardType.Uri
-            )
+            if (requiredError) {
+                Text(
+                    text = stringResource(R.string.create_task_required_error),
+                    modifier = Modifier.padding(top = 12.dp),
+                    color = colorResource(R.color.login_error),
+                    fontSize = 12.sp
+                )
+            }
             FilledActionButton(
                 text = stringResource(R.string.create_task_save),
                 colorResId = R.color.login_button,
@@ -588,14 +910,607 @@ fun CreateTaskScreen(projectName: String?) {
                     .padding(top = 24.dp)
                     .height(48.dp),
                 onClick = {
-                    if (title.trim().isEmpty()) {
-                        titleError = true
+                    if (isSaving) {
                         return@FilledActionButton
                     }
-                    Toast.makeText(context, R.string.create_task_saved, Toast.LENGTH_LONG).show()
-                    activity.finish()
+                    val userId = assignees.firstOrNull { it.label() == assigneeLabel }?.userId ?: 0
+                    val estimatedTimeValue = estimatedTime.toDoubleOrNull()
+                    if (
+                        projectId <= 0 ||
+                        title.trim().isEmpty() ||
+                        userId <= 0 ||
+                        estimatedEndDate.isBlank() ||
+                        estimatedTimeValue == null ||
+                        estimatedTimeValue < 0
+                    ) {
+                        requiredError = true
+                        return@FilledActionButton
+                    }
+                    val token = sessionManager.token()
+                    if (token.isNullOrBlank()) {
+                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                        activity.finish()
+                        return@FilledActionButton
+                    }
+
+                    isSaving = true
+                    Thread {
+                        val result = projectsApi.createTask(
+                            token,
+                            projectId,
+                            RemoteCreateTaskInput(
+                                userId = userId,
+                                title = title.trim(),
+                                description = description.trim(),
+                                estimatedEndDate = estimatedEndDate,
+                                estimatedTime = estimatedTimeValue,
+                                location = location.trim()
+                            )
+                        )
+                        mainHandler.post {
+                            isSaving = false
+                            when (result) {
+                                CreateTaskResult.Success -> {
+                                    Toast.makeText(context, R.string.create_task_saved, Toast.LENGTH_LONG).show()
+                                    activity.finish()
+                                }
+                                CreateTaskResult.Unauthorized -> {
+                                    sessionManager.clear()
+                                    activity.startActivity(Intent(activity, MainActivity::class.java))
+                                    activity.finish()
+                                }
+                                CreateTaskResult.NetworkError,
+                                is CreateTaskResult.ServerError -> {
+                                    Toast.makeText(context, R.string.create_task_error, Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }.start()
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun TaskDetailScreen(taskId: Int) {
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val taskApi = remember { TaskApi() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    var task by remember { mutableStateOf<ApiTask?>(null) }
+    var timeToAdd by remember { mutableStateOf("") }
+    var workDate by remember { mutableStateOf(currentDateString()) }
+    var observation by remember { mutableStateOf("") }
+    var requiredError by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+
+    fun authFailure() {
+        sessionManager.clear()
+        activity.startActivity(Intent(activity, MainActivity::class.java))
+        activity.finish()
+    }
+
+    fun loadTask() {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank() || taskId <= 0) {
+            authFailure()
+            return
+        }
+        Thread {
+            val result = taskApi.getTask(token, taskId)
+            mainHandler.post {
+                when (result) {
+                    is TaskResult.Success -> {
+                        task = result.task
+                        if (observation.isBlank()) {
+                            observation = result.task.observation
+                        }
+                    }
+                    TaskResult.Unauthorized -> authFailure()
+                    TaskResult.NetworkError,
+                    is TaskResult.ServerError -> Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    fun mutate(action: (String) -> TaskMutationResult, successMessage: Int, afterSuccess: () -> Unit = { loadTask() }) {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            authFailure()
+            return
+        }
+        isSaving = true
+        Thread {
+            val result = action(token)
+            mainHandler.post {
+                isSaving = false
+                when (result) {
+                    TaskMutationResult.Success -> {
+                        Toast.makeText(context, successMessage, Toast.LENGTH_LONG).show()
+                        afterSuccess()
+                    }
+                    TaskMutationResult.Unauthorized -> authFailure()
+                    TaskMutationResult.NetworkError,
+                    is TaskMutationResult.ServerError -> Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    LaunchedEffect(taskId) {
+        loadTask()
+    }
+
+    AppScaffold(selectedDestination = Destination.PROJECTS) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 18.dp, top = 56.dp, end = 18.dp, bottom = 24.dp)
+        ) {
+            Text(
+                text = task?.title ?: stringResource(R.string.task_detail_title),
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = task?.status?.uppercase(Locale.getDefault()).orEmpty(),
+                modifier = Modifier.padding(top = 4.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            SettingsPanel(Modifier.padding(top = 22.dp)) {
+                TaskDetailField(R.string.task_detail_description, task?.description.orEmpty())
+                TaskDetailField(R.string.task_detail_status, task?.status.orEmpty())
+                TaskDetailField(R.string.task_detail_estimated_end_date, task?.estimatedEndDate?.take(10).orEmpty())
+                TaskDetailField(R.string.task_detail_actual_end_date, task?.actualEndDate?.take(10).orEmpty())
+                TaskDetailField(R.string.task_detail_estimated_time, task?.estimatedTime?.toString().orEmpty())
+                TaskDetailField(R.string.task_detail_time_spent, task?.timeSpent?.toString().orEmpty())
+                TaskDetailField(R.string.task_detail_work_date, task?.workDate?.take(10).orEmpty())
+                TaskDetailField(R.string.task_detail_location, task?.location.orEmpty())
+                TaskDetailField(R.string.task_detail_observation, task?.observation.orEmpty())
+            }
+
+            SettingsPanel(Modifier.padding(top = 16.dp)) {
+                Text(
+                    text = stringResource(R.string.task_detail_add_time).uppercase(Locale.getDefault()),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.task_detail_time_spent)
+                        CreateTaskInput(
+                            value = timeToAdd,
+                            onValueChange = {
+                                timeToAdd = it
+                                requiredError = false
+                            },
+                            singleLine = true,
+                            keyboardType = KeyboardType.Number
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.task_detail_work_date)
+                        PickerInput(
+                            value = workDate,
+                            hint = stringResource(R.string.create_task_date_hint),
+                            iconResId = R.drawable.ic_calendar_clock,
+                            onClick = { showDatePicker(context) { workDate = it } }
+                        )
+                    }
+                }
+                CreateTaskLabel(R.string.task_detail_observation)
+                CreateTaskInput(
+                    value = observation,
+                    onValueChange = { observation = it },
+                    minHeight = 82.dp,
+                    singleLine = false
+                )
+                if (requiredError) {
+                    Text(
+                        text = stringResource(R.string.create_task_required_error),
+                        modifier = Modifier.padding(top = 12.dp),
+                        color = colorResource(R.color.login_error),
+                        fontSize = 12.sp
+                    )
+                }
+                FilledActionButton(
+                    text = stringResource(R.string.task_detail_add_time),
+                    colorResId = R.color.login_button,
+                    radius = 6.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 18.dp)
+                        .height(46.dp),
+                    onClick = {
+                        if (isSaving) return@FilledActionButton
+                        val time = timeToAdd.toDoubleOrNull()
+                        if (time == null || time <= 0 || workDate.isBlank()) {
+                            requiredError = true
+                            return@FilledActionButton
+                        }
+                        mutate(
+                            action = { token -> taskApi.addTimeSpent(token, taskId, time, workDate, observation.trim()) },
+                            successMessage = R.string.task_detail_updated,
+                            afterSuccess = {
+                                timeToAdd = ""
+                                loadTask()
+                            }
+                        )
+                    }
+                )
+            }
+
+            FilledActionButton(
+                text = stringResource(R.string.task_detail_complete),
+                colorResId = R.color.project_green,
+                radius = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+                    .height(46.dp),
+                onClick = {
+                    if (isSaving) return@FilledActionButton
+                    mutate(
+                        action = { token -> taskApi.complete(token, taskId, workDate, observation.trim()) },
+                        successMessage = R.string.task_detail_updated
+                    )
+                }
+            )
+            FilledActionButton(
+                text = stringResource(R.string.task_detail_delete),
+                colorResId = R.color.settings_logout,
+                radius = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .height(46.dp),
+                onClick = {
+                    if (isSaving) return@FilledActionButton
+                    mutate(
+                        action = { token -> taskApi.delete(token, taskId) },
+                        successMessage = R.string.task_detail_deleted,
+                        afterSuccess = { activity.finish() }
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun AdminScreen() {
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val adminApi = remember { AdminApi() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val currentUser = remember { sessionManager.currentUser() }
+    var users by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
+    var name by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf("user") }
+    var requiredError by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
+
+    fun handleAuthFailure() {
+        sessionManager.clear()
+        activity.startActivity(Intent(activity, MainActivity::class.java))
+        activity.finish()
+    }
+
+    fun loadUsers() {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            handleAuthFailure()
+            return
+        }
+
+        Thread {
+            val result = adminApi.users(token)
+            mainHandler.post {
+                when (result) {
+                    is AdminUsersResult.Success -> users = result.users
+                    AdminUsersResult.Unauthorized -> handleAuthFailure()
+                    AdminUsersResult.Forbidden -> {
+                        Toast.makeText(context, R.string.admin_forbidden, Toast.LENGTH_LONG).show()
+                        activity.startActivity(Intent(activity, DashboardActivity::class.java))
+                        activity.finish()
+                    }
+                    AdminUsersResult.NetworkError,
+                    is AdminUsersResult.ServerError -> {
+                        Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }.start()
+    }
+
+    fun mutate(
+        mutation: (String) -> AdminMutationResult,
+        successMessageResId: Int,
+        onSuccess: () -> Unit = {},
+        onFinished: () -> Unit = {}
+    ) {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            handleAuthFailure()
+            onFinished()
+            return
+        }
+
+        Thread {
+            val result = mutation(token)
+            mainHandler.post {
+                when (result) {
+                    AdminMutationResult.Success -> {
+                        Toast.makeText(context, successMessageResId, Toast.LENGTH_LONG).show()
+                        onSuccess()
+                        loadUsers()
+                    }
+                    AdminMutationResult.Unauthorized -> handleAuthFailure()
+                    AdminMutationResult.Forbidden -> Toast.makeText(context, R.string.admin_forbidden, Toast.LENGTH_LONG).show()
+                    AdminMutationResult.NetworkError,
+                    is AdminMutationResult.ServerError -> Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
+                }
+                onFinished()
+            }
+        }.start()
+    }
+
+    LaunchedEffect(Unit) {
+        if (!sessionManager.isAdmin()) {
+            Toast.makeText(context, R.string.admin_forbidden, Toast.LENGTH_LONG).show()
+            activity.startActivity(Intent(activity, DashboardActivity::class.java))
+            activity.finish()
+            return@LaunchedEffect
+        }
+        loadUsers()
+    }
+
+    val adminCount = users.count { it.role == "admin" }
+    val managerCount = users.count { it.role == "project_manager" }
+
+    AppScaffold(selectedDestination = Destination.ADMIN) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(start = 18.dp, top = 66.dp, end = 18.dp, bottom = 24.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.admin_title),
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.admin_subtitle),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 15.sp
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 22.dp)
+                    .height(86.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AdminMetricCard(
+                    label = stringResource(R.string.admin_users),
+                    value = users.size.toString(),
+                    colorResId = R.color.bottom_nav_selected,
+                    modifier = Modifier.weight(1f)
+                )
+                AdminMetricCard(
+                    label = "Admins",
+                    value = adminCount.toString(),
+                    colorResId = R.color.project_purple,
+                    modifier = Modifier.weight(1f)
+                )
+                AdminMetricCard(
+                    label = "Gestores",
+                    value = managerCount.toString(),
+                    colorResId = R.color.project_green,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            SettingsPanel(Modifier.padding(top = 16.dp)) {
+                Text(
+                    text = stringResource(R.string.admin_create_user).uppercase(Locale.getDefault()),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.admin_name)
+                        CreateTaskInput(
+                            value = name,
+                            onValueChange = {
+                                name = it
+                                requiredError = false
+                            },
+                            singleLine = true
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.admin_username)
+                        CreateTaskInput(
+                            value = username,
+                            onValueChange = {
+                                username = it
+                                requiredError = false
+                            },
+                            singleLine = true
+                        )
+                    }
+                }
+                CreateTaskLabel(R.string.admin_email)
+                CreateTaskInput(
+                    value = email,
+                    onValueChange = {
+                        email = it
+                        requiredError = false
+                    },
+                    singleLine = true,
+                    keyboardType = KeyboardType.Email
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.admin_password)
+                        CreateTaskInput(
+                            value = password,
+                            onValueChange = {
+                                password = it
+                                requiredError = false
+                            },
+                            singleLine = true,
+                            keyboardType = KeyboardType.Password,
+                            visualTransformation = PasswordVisualTransformation()
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.admin_role)
+                        SelectInput(
+                            selected = role.displayRole(),
+                            values = listOf("Utilizador", "Gestor", "Admin"),
+                            onSelected = { selected ->
+                                role = when (selected) {
+                                    "Admin" -> "admin"
+                                    "Gestor" -> "project_manager"
+                                    else -> "user"
+                                }
+                            }
+                        )
+                    }
+                }
+                if (requiredError) {
+                    Text(
+                        text = stringResource(R.string.admin_required_error),
+                        modifier = Modifier.padding(top = 12.dp),
+                        color = colorResource(R.color.login_error),
+                        fontSize = 12.sp
+                    )
+                }
+                FilledActionButton(
+                    text = stringResource(R.string.admin_save_user),
+                    colorResId = R.color.login_button,
+                    radius = 6.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 18.dp)
+                        .height(46.dp),
+                    onClick = {
+                        if (isSaving) {
+                            return@FilledActionButton
+                        }
+                        if (
+                            name.trim().isEmpty() ||
+                            username.trim().isEmpty() ||
+                            email.trim().isEmpty() ||
+                            password.length < 6
+                        ) {
+                            requiredError = true
+                            return@FilledActionButton
+                        }
+                        isSaving = true
+                        mutate(
+                            mutation = { token ->
+                                adminApi.createUser(
+                                    token,
+                                    CreateUserInput(
+                                        name = name.trim(),
+                                        username = username.trim(),
+                                        email = email.trim(),
+                                        password = password,
+                                        role = role
+                                    )
+                                )
+                            },
+                            successMessageResId = R.string.admin_create_success,
+                            onSuccess = {
+                                name = ""
+                                username = ""
+                                email = ""
+                                password = ""
+                                role = "user"
+                            },
+                            onFinished = { isSaving = false }
+                        )
+                    }
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.admin_users),
+                    modifier = Modifier.weight(1f),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = users.size.toString(),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            users.forEach { user ->
+                AdminUserRow(
+                    user = user,
+                    canDelete = user.userId != currentUser?.userId,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    onDelete = {
+                        mutate(
+                            mutation = { token -> adminApi.deleteUser(token, user.userId) },
+                            successMessageResId = R.string.admin_delete_success
+                        )
+                    }
+                )
+            }
         }
     }
 }
@@ -784,6 +1699,15 @@ private fun BottomNavigation(selectedDestination: Destination) {
             modifier = Modifier.weight(1f),
             onClick = { navigate(context, selectedDestination, Destination.PROJECTS, ProjectsActivity::class.java) }
         )
+        if (SessionManager(context.applicationContext).isAdmin()) {
+            BottomNavigationItem(
+                labelResId = R.string.nav_admin,
+                iconResId = R.drawable.ic_settings,
+                selected = selectedDestination == Destination.ADMIN,
+                modifier = Modifier.weight(1f),
+                onClick = { navigate(context, selectedDestination, Destination.ADMIN, AdminActivity::class.java) }
+            )
+        }
         BottomNavigationItem(
             labelResId = R.string.nav_settings,
             iconResId = R.drawable.ic_settings,
@@ -966,6 +1890,45 @@ private fun DashboardSummaryCard(
 }
 
 @Composable
+private fun AdminMetricCard(
+    label: String,
+    value: String,
+    @ColorRes colorResId: Int,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
+            .padding(horizontal = 10.dp, vertical = 9.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(colorResource(colorResId))
+        )
+        Text(
+            text = value,
+            modifier = Modifier.padding(top = 8.dp),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
+        Text(
+            text = label,
+            modifier = Modifier.padding(top = 2.dp),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun ProgressLine(progress: Int, @ColorRes colorResId: Int) {
     Box(
         modifier = Modifier
@@ -984,11 +1947,16 @@ private fun ProgressLine(progress: Int, @ColorRes colorResId: Int) {
 }
 
 @Composable
-private fun DashboardTaskCard(task: DashboardTask, modifier: Modifier = Modifier) {
+private fun DashboardTaskCard(
+    task: DashboardTask,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
     Row(
         modifier = modifier
             .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
-            .clip(RoundedCornerShape(8.dp)),
+            .clip(RoundedCornerShape(8.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1004,7 +1972,7 @@ private fun DashboardTaskCard(task: DashboardTask, modifier: Modifier = Modifier
                 .padding(start = 10.dp, end = 8.dp)
         ) {
             Text(
-                text = stringResource(task.titleResId),
+                text = task.titleText ?: stringResource(task.titleResId),
                 color = colorResource(R.color.dashboard_text_primary),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
@@ -1012,7 +1980,7 @@ private fun DashboardTaskCard(task: DashboardTask, modifier: Modifier = Modifier
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = stringResource(task.metaResId),
+                text = task.metaText ?: stringResource(task.metaResId),
                 modifier = Modifier.padding(top = 2.dp),
                 color = colorResource(R.color.dashboard_text_secondary),
                 fontSize = 12.sp,
@@ -1057,7 +2025,7 @@ private fun ProjectCard(
                     .padding(start = 12.dp)
             ) {
                 Text(
-                    text = stringResource(project.nameResId),
+                    text = project.nameText ?: stringResource(project.nameResId),
                     color = colorResource(R.color.dashboard_text_primary),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
@@ -1073,7 +2041,7 @@ private fun ProjectCard(
             }
         }
         Text(
-            text = stringResource(project.descriptionResId),
+            text = project.descriptionText ?: stringResource(project.descriptionResId),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 12.dp),
@@ -1095,11 +2063,17 @@ private fun ProjectCard(
 }
 
 @Composable
-private fun ProjectTaskCard(projectTask: ProjectTask, modifier: Modifier = Modifier) {
+private fun ProjectTaskCard(
+    projectTask: ProjectTask,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
     val task = projectTask.task
     Column(
         modifier = modifier
             .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1110,7 +2084,7 @@ private fun ProjectTaskCard(projectTask: ProjectTask, modifier: Modifier = Modif
                     .padding(start = 12.dp, end = 8.dp)
             ) {
                 Text(
-                    text = stringResource(task.titleResId),
+                    text = task.titleText ?: stringResource(task.titleResId),
                     color = colorResource(R.color.dashboard_text_primary),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
@@ -1118,7 +2092,7 @@ private fun ProjectTaskCard(projectTask: ProjectTask, modifier: Modifier = Modif
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = stringResource(task.metaResId),
+                    text = task.metaText ?: stringResource(task.metaResId),
                     color = colorResource(R.color.dashboard_text_secondary),
                     fontSize = 12.sp,
                     maxLines = 1,
@@ -1157,6 +2131,194 @@ private fun MemberRow(member: ProjectMember, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold
         )
     }
+}
+
+@Composable
+private fun SelectableMemberRow(
+    user: ApiUser,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val background = colorResource(if (selected) R.color.task_blue_soft else R.color.dashboard_card)
+    val stroke = colorResource(if (selected) R.color.bottom_nav_selected else R.color.dashboard_card_stroke)
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(background)
+            .border(1.dp, stroke, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = user.name,
+            modifier = Modifier.weight(1f),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = user.role,
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 12.sp,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun AdminUserRow(
+    user: ApiUser,
+    canDelete: Boolean,
+    modifier: Modifier = Modifier,
+    onDelete: () -> Unit
+) {
+    Row(
+        modifier = modifier
+            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(colorResource(user.roleSoftColorResId())),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = user.name
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                    .joinToString("") { it.first().uppercase() }
+                    .ifBlank { "U" },
+                color = colorResource(user.roleColorResId()),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp, end = 10.dp)
+        ) {
+            Text(
+                text = user.name,
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = user.email,
+                modifier = Modifier.padding(top = 2.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            RoleBadge(user.role, Modifier.padding(top = 7.dp))
+        }
+        if (canDelete) {
+            FilledActionButton(
+                text = stringResource(R.string.admin_delete_user),
+                colorResId = R.color.settings_logout,
+                radius = 6.dp,
+                modifier = Modifier
+                    .width(86.dp)
+                    .height(36.dp),
+                onClick = onDelete
+            )
+        }
+    }
+}
+
+@Composable
+private fun TaskDetailField(@StringRes labelResId: Int, value: String) {
+    Text(
+        text = stringResource(labelResId).uppercase(Locale.getDefault()),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp),
+        color = colorResource(R.color.dashboard_text_secondary),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold
+    )
+    Text(
+        text = value.ifBlank { "-" },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 3.dp),
+        color = colorResource(R.color.dashboard_text_primary),
+        fontSize = 14.sp
+    )
+}
+
+@Composable
+private fun RoleBadge(role: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(colorResource(ApiUser(0, "", "", role).roleSoftColorResId()))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = role.displayRole(),
+            color = colorResource(ApiUser(0, "", "", role).roleColorResId()),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
+    }
+}
+
+private fun ApiUser.label(): String {
+    return "$name ($email)"
+}
+
+private fun ApiUser.canManageProjects(): Boolean {
+    return role == "admin" || role == "project_manager"
+}
+
+private fun String.displayRole(): String {
+    return when (this) {
+        "admin" -> "Admin"
+        "project_manager" -> "Gestor"
+        else -> "Utilizador"
+    }
+}
+
+private fun ApiUser.roleColorResId(): Int {
+    return when (role) {
+        "admin" -> R.color.project_purple
+        "project_manager" -> R.color.project_green
+        else -> R.color.task_status_gray_text
+    }
+}
+
+private fun ApiUser.roleSoftColorResId(): Int {
+    return when (role) {
+        "admin" -> R.color.project_purple_soft
+        "project_manager" -> R.color.project_green_soft
+        else -> R.color.task_status_gray_bg
+    }
+}
+
+private fun currentDateString(): String {
+    val calendar = Calendar.getInstance()
+    return String.format(
+        Locale.US,
+        "%04d-%02d-%02d",
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH) + 1,
+        calendar.get(Calendar.DAY_OF_MONTH)
+    )
 }
 
 @Composable
@@ -1228,7 +2390,7 @@ private fun StatusBadge(task: DashboardTask, height: Dp, minWidth: Dp, modifier:
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = stringResource(task.statusResId).uppercase(Locale.getDefault()),
+            text = (task.statusText ?: stringResource(task.statusResId)).uppercase(Locale.getDefault()),
             color = colorResource(task.statusTextColorResId),
             fontSize = 8.sp,
             fontWeight = FontWeight.Bold,
@@ -1279,7 +2441,8 @@ private fun CreateTaskInput(
     modifier: Modifier = Modifier,
     minHeight: Dp = 48.dp,
     singleLine: Boolean = true,
-    keyboardType: KeyboardType = KeyboardType.Text
+    keyboardType: KeyboardType = KeyboardType.Text,
+    visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
     Box(
         modifier = modifier
@@ -1298,7 +2461,8 @@ private fun CreateTaskInput(
                 .padding(top = if (singleLine) 0.dp else 12.dp),
             singleLine = singleLine,
             textStyle = TextStyle(color = colorResource(R.color.dashboard_text_primary), fontSize = 15.sp),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType)
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            visualTransformation = visualTransformation
         )
     }
 }

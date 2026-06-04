@@ -187,6 +187,8 @@ func writeUserServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusForbidden, message)
 	case errors.Is(err, services.ErrConflict):
 		writeError(w, http.StatusConflict, message)
+	case errors.Is(err, services.ErrNotFound):
+		writeError(w, http.StatusNotFound, message)
 	case errors.Is(err, services.ErrValidation):
 		writeError(w, http.StatusBadRequest, message)
 	default:
@@ -200,6 +202,7 @@ func cleanServiceErrorMessage(err error) string {
 		services.ErrUnauthorized.Error() + ": ",
 		services.ErrForbidden.Error() + ": ",
 		services.ErrConflict.Error() + ": ",
+		services.ErrNotFound.Error() + ": ",
 		services.ErrValidation.Error() + ": ",
 	} {
 		message = strings.TrimPrefix(message, prefix)
