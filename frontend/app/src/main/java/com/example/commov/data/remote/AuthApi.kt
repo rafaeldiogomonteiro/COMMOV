@@ -48,6 +48,36 @@ class AuthApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
+    fun logout(token: String): LogoutResult {
+        val connection = (URL("${baseUrl.trimEnd('/')}/logout").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 10_000
+            readTimeout = 10_000
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Authorization", "Bearer $token")
+        }
+
+        return try {
+            val responseBody = if (connection.responseCode in 200..299) {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }
+
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_OK -> LogoutResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> LogoutResult.Success
+                else -> LogoutResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            LogoutResult.NetworkError
+        } catch (_: Exception) {
+            LogoutResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     fun checkLogin(token: String): CheckLoginResult {
         val connection = (URL("${baseUrl.trimEnd('/')}/check-login").openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -116,6 +146,12 @@ sealed interface LoginResult {
     data object InvalidCredentials : LoginResult
     data object NetworkError : LoginResult
     data class ServerError(val message: String?) : LoginResult
+}
+
+sealed interface LogoutResult {
+    data object Success : LogoutResult
+    data object NetworkError : LogoutResult
+    data class ServerError(val message: String?) : LogoutResult
 }
 
 sealed interface CheckLoginResult {

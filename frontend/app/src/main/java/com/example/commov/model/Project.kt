@@ -14,5 +14,11 @@ data class Project(
     @ColorRes val accentColorResId: Int,
     @ColorRes val badgeColorResId: Int,
     val nameText: String? = null,
-    val descriptionText: String? = null
+    val descriptionText: String? = null,
+    val status: String = "active",
+    val managerId: Int = 0,
+    val managerName: String? = null,
+    val startDate: String? = null,
+    val estimatedEndDate: String? = null,
+    val actualEndDate: String? = null
 )

@@ -39,9 +39,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -52,7 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.material3.Switch
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalConfiguration
@@ -74,6 +76,9 @@ import com.example.commov.MainActivity
 import com.example.commov.R
 import com.example.commov.data.local.SessionManager
 import com.example.commov.data.local.LocaleHelper
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.commov.data.remote.AuthApi
 import com.example.commov.data.remote.AdminApi
 import com.example.commov.data.remote.AdminMutationResult
 import com.example.commov.data.remote.AdminUsersResult
@@ -84,8 +89,13 @@ import com.example.commov.data.remote.CreateProjectInput
 import com.example.commov.data.remote.CreateProjectResult
 import com.example.commov.data.remote.CreateTaskInput as RemoteCreateTaskInput
 import com.example.commov.data.remote.CreateTaskResult
+import com.example.commov.data.remote.PhotoApi
+import com.example.commov.data.remote.PhotoUploadResult
+import com.example.commov.data.remote.ProjectMutationResult
 import com.example.commov.data.remote.ProjectsApi
 import com.example.commov.data.remote.TaskApi
+import com.example.commov.data.remote.UpdateProjectInput
+import com.example.commov.data.remote.UpdateUserInput
 import com.example.commov.data.remote.TaskMutationResult
 import com.example.commov.data.remote.TaskResult
 import com.example.commov.data.remote.UsersResult
@@ -144,11 +154,10 @@ fun LoginScreen() {
     ) {
         Column(
             modifier = Modifier
-                .padding(horizontal = 14.dp)
+                .padding(horizontal = 20.dp)
                 .fillMaxWidth()
-                .shadow(14.dp, RoundedCornerShape(10.dp), clip = false)
-                .cardBackground(R.color.login_card, R.color.login_card_stroke, 10.dp)
-                .padding(start = 32.dp, top = 40.dp, end = 32.dp, bottom = 38.dp)
+                .cardBackground(R.color.login_card, R.color.login_card_stroke, 8.dp)
+                .padding(start = 24.dp, top = 28.dp, end = 24.dp, bottom = 28.dp)
         ) {
             LanguageSelector(
                 modifier = Modifier.align(Alignment.End),
@@ -160,22 +169,31 @@ fun LoginScreen() {
                 }
             )
             Text(
+                text = stringResource(R.string.app_name),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                color = colorResource(R.color.login_text_primary),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
                 text = stringResource(R.string.login_title),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 26.dp),
+                    .padding(top = 4.dp),
                 color = colorResource(R.color.login_text_primary),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium
             )
             Text(
                 text = stringResource(R.string.login_subtitle),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 6.dp),
+                    .padding(top = 4.dp),
                 color = colorResource(R.color.login_text_secondary),
-                fontSize = 16.sp,
-                lineHeight = 20.sp
+                fontSize = 14.sp,
+                lineHeight = 18.sp
             )
             Text(
                 text = stringResource(R.string.login_email_label),
@@ -194,27 +212,14 @@ fun LoginScreen() {
                 modifier = Modifier.padding(top = 6.dp)
             )
             ErrorText(state.emailErrorResId)
-            Row(
+            Text(
+                text = stringResource(R.string.login_password_label),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.login_password_label),
-                    modifier = Modifier.weight(1f),
-                    color = colorResource(R.color.login_text_secondary),
-                    fontSize = 16.sp
-                )
-                Text(
-                    text = stringResource(R.string.login_forgot_password),
-                    modifier = Modifier.clickable {
-                        Toast.makeText(context, R.string.login_forgot_password, Toast.LENGTH_SHORT).show()
-                    },
-                    color = colorResource(R.color.login_link),
-                    fontSize = 16.sp
-                )
-            }
+                color = colorResource(R.color.login_text_secondary),
+                fontSize = 14.sp
+            )
             LoginInput(
                 value = state.password,
                 onValueChange = viewModel::onPasswordChanged,
@@ -290,22 +295,21 @@ fun DashboardScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 38.dp, end = 18.dp, bottom = 20.dp)
+                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 20.dp)
         ) {
-            Spacer(Modifier.height(28.dp))
             Text(
-                text = stringResource(R.string.dashboard_greeting, state.userName),
+                text = stringResource(R.string.dashboard_greeting, state.userName.ifBlank { "…" }),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 18.dp),
+                    .padding(bottom = 16.dp),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 24.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(132.dp),
+                    .height(118.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 DashboardSummaryCard(
@@ -321,37 +325,52 @@ fun DashboardScreen() {
                     count = state.completedTasks,
                     progress = state.completedProgress,
                     iconResId = R.drawable.ic_check_circle,
-                    progressColorResId = R.color.dashboard_muted,
+                    progressColorResId = R.color.project_green,
                     modifier = Modifier.weight(1f)
                 )
             }
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 34.dp),
+                    .padding(top = 24.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = stringResource(R.string.dashboard_my_tasks),
                     modifier = Modifier.weight(1f),
                     color = colorResource(R.color.dashboard_text_primary),
-                    fontSize = 24.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = stringResource(R.string.dashboard_see_all),
-                    modifier = Modifier.height(36.dp),
-                    color = colorResource(R.color.dashboard_text_primary),
+                    modifier = Modifier
+                        .clickable {
+                            context.startActivity(Intent(context, ProjectsActivity::class.java))
+                        }
+                        .padding(vertical = 8.dp),
+                    color = colorResource(R.color.bottom_nav_selected),
                     fontSize = 14.sp,
-                    textAlign = TextAlign.Center
+                    fontWeight = FontWeight.Medium
                 )
             }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
+                    .padding(top = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                if (state.tasks.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.dashboard_empty_tasks),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        color = colorResource(R.color.dashboard_text_secondary),
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
                 state.tasks.forEach { task ->
                     DashboardTaskCard(
                         task = task,
@@ -378,6 +397,10 @@ fun ProjectsScreen() {
     val context = LocalContext.current
     val activity = context.findActivity()
     val viewModel = remember { ProjectsViewModel(context.applicationContext) }
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val projectsApi = remember { ProjectsApi() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val canManage = remember { sessionManager.canManageProjects() }
     var state by remember {
         mutableStateOf(
             ProjectsUiState(
@@ -388,7 +411,40 @@ fun ProjectsScreen() {
         )
     }
     var selectedProjectId by remember { mutableStateOf<Int?>(null) }
+    var showEditProject by remember { mutableStateOf(false) }
+    var editName by remember { mutableStateOf("") }
+    var editDescription by remember { mutableStateOf("") }
+    var editStatus by remember { mutableStateOf("active") }
     val project = state.projects.firstOrNull { it.projectId == selectedProjectId }
+
+    fun runProjectMutation(
+        mutation: (String) -> ProjectMutationResult,
+        successMessageResId: Int,
+        onSuccess: () -> Unit = { viewModel.reload() }
+    ) {
+        val token = sessionManager.token() ?: return
+        Thread {
+            val result = mutation(token)
+            mainHandler.post {
+                when (result) {
+                    ProjectMutationResult.Success -> {
+                        Toast.makeText(context, successMessageResId, Toast.LENGTH_LONG).show()
+                        onSuccess()
+                        viewModel.reload()
+                    }
+                    ProjectMutationResult.Unauthorized -> {
+                        sessionManager.clear()
+                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                        activity.finish()
+                    }
+                    ProjectMutationResult.NetworkError,
+                    is ProjectMutationResult.ServerError -> {
+                        Toast.makeText(context, R.string.project_action_error, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }.start()
+    }
 
     DisposableEffect(viewModel) {
         viewModel.observe { state = it }
@@ -407,7 +463,7 @@ fun ProjectsScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 66.dp, end = 18.dp, bottom = 20.dp)
+                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 20.dp)
         ) {
             Text(
                 text = if (project == null) {
@@ -417,7 +473,7 @@ fun ProjectsScreen() {
                 },
                 modifier = Modifier.fillMaxWidth(),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
@@ -453,6 +509,17 @@ fun ProjectsScreen() {
                             }
                         )
                     }
+                    if (state.projects.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.projects_empty),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            color = colorResource(R.color.dashboard_text_secondary),
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                     state.projects.forEach { item ->
                         ProjectCard(
                             project = item,
@@ -473,6 +540,45 @@ fun ProjectsScreen() {
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    ProjectDetailMeta(project = project)
+                    if (canManage) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            FilledActionButton(
+                                text = stringResource(R.string.project_edit),
+                                colorResId = R.color.login_button,
+                                radius = 6.dp,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp),
+                                onClick = {
+                                    editName = project.nameText.orEmpty()
+                                    editDescription = project.descriptionText.orEmpty()
+                                    editStatus = project.status
+                                    showEditProject = true
+                                }
+                            )
+                            FilledActionButton(
+                                text = stringResource(R.string.project_delete),
+                                colorResId = R.color.settings_logout,
+                                radius = 6.dp,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp),
+                                onClick = {
+                                    runProjectMutation(
+                                        mutation = { token -> projectsApi.deleteProject(token, project.projectId) },
+                                        successMessageResId = R.string.project_deleted,
+                                        onSuccess = { selectedProjectId = null }
+                                    )
+                                }
+                            )
+                        }
+                    }
                     if (state.canCreateTasks) {
                         FilledActionButton(
                             text = stringResource(R.string.project_create_task),
@@ -516,12 +622,103 @@ fun ProjectsScreen() {
                             member = member,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(58.dp)
-                                .padding(bottom = 8.dp)
+                                .padding(bottom = 8.dp),
+                            onRemove = if (canManage && !member.isManager && member.userId > 0) {
+                                {
+                                    runProjectMutation(
+                                        mutation = { token ->
+                                            projectsApi.removeMember(token, project.projectId, member.userId)
+                                        },
+                                        successMessageResId = R.string.project_member_removed
+                                    )
+                                }
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
             }
+        }
+    }
+
+    if (showEditProject && project != null) {
+        AlertDialog(
+            onDismissRequest = { showEditProject = false },
+            title = { Text(stringResource(R.string.project_edit)) },
+            text = {
+                Column {
+                    CreateTaskLabelNoTop(R.string.create_project_name)
+                    CreateTaskInput(value = editName, onValueChange = { editName = it }, singleLine = true)
+                    CreateTaskLabel(R.string.create_project_description)
+                    CreateTaskInput(value = editDescription, onValueChange = { editDescription = it }, singleLine = false)
+                    CreateTaskLabel(R.string.create_task_status)
+                    CreateTaskInput(value = editStatus, onValueChange = { editStatus = it }, singleLine = true)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        runProjectMutation(
+                            mutation = { token ->
+                                projectsApi.updateProject(
+                                    token,
+                                    project.projectId,
+                                    UpdateProjectInput(
+                                        name = editName.trim(),
+                                        description = editDescription.trim(),
+                                        status = editStatus.trim()
+                                    )
+                                )
+                            },
+                            successMessageResId = R.string.project_updated,
+                            onSuccess = { showEditProject = false }
+                        )
+                    }
+                ) {
+                    Text(stringResource(R.string.create_project_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditProject = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ProjectDetailMeta(project: Project) {
+    SettingsPanel(Modifier.padding(top = 12.dp)) {
+        Text(
+            text = stringResource(R.string.project_status, project.status),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 13.sp
+        )
+        project.managerName?.let { managerName ->
+            Text(
+                text = stringResource(R.string.project_manager_label, managerName),
+                modifier = Modifier.padding(top = 4.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 13.sp
+            )
+        }
+        if (!project.startDate.isNullOrBlank() && !project.estimatedEndDate.isNullOrBlank()) {
+            Text(
+                text = stringResource(R.string.project_dates, project.startDate, project.estimatedEndDate),
+                modifier = Modifier.padding(top = 4.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 13.sp
+            )
+        }
+        project.actualEndDate?.takeIf { it.isNotBlank() }?.let { actualEnd ->
+            Text(
+                text = stringResource(R.string.project_actual_end, actualEnd),
+                modifier = Modifier.padding(top = 4.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 13.sp
+            )
         }
     }
 }
@@ -585,13 +782,13 @@ fun CreateProjectScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 56.dp, end = 18.dp, bottom = 24.dp)
+                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
         ) {
             Text(
                 text = stringResource(R.string.create_project_title),
                 modifier = Modifier.fillMaxWidth(),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
 
@@ -762,7 +959,7 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
     val projectsApi = remember { ProjectsApi() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val resolvedProjectName = projectName?.takeIf { it.trim().isNotEmpty() }
-        ?: stringResource(R.string.project_alpha_name)
+        ?: stringResource(R.string.project_unnamed)
     var assignees by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
     var assigneesLoaded by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
@@ -821,13 +1018,13 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 56.dp, end = 18.dp, bottom = 24.dp)
+                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
         ) {
             Text(
                 text = stringResource(R.string.create_task_title),
                 modifier = Modifier.fillMaxWidth(),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
@@ -978,11 +1175,14 @@ fun TaskDetailScreen(taskId: Int) {
     val activity = context.findActivity()
     val sessionManager = remember { SessionManager(context.applicationContext) }
     val taskApi = remember { TaskApi() }
+    val photoApi = remember { PhotoApi() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val canManageTasks = remember { sessionManager.canManageProjects() }
     var task by remember { mutableStateOf<ApiTask?>(null) }
     var timeToAdd by remember { mutableStateOf("") }
     var workDate by remember { mutableStateOf(currentDateString()) }
     var observation by remember { mutableStateOf("") }
+    var photoPath by remember { mutableStateOf("") }
     var requiredError by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
 
@@ -990,6 +1190,29 @@ fun TaskDetailScreen(taskId: Int) {
         sessionManager.clear()
         activity.startActivity(Intent(activity, MainActivity::class.java))
         activity.finish()
+    }
+
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        val token = sessionManager.token() ?: return@rememberLauncherForActivityResult
+        if (uri == null) return@rememberLauncherForActivityResult
+        Thread {
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@Thread
+            val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+            val result = photoApi.uploadPhoto(token, "task-photo.jpg", bytes, mimeType)
+            mainHandler.post {
+                when (result) {
+                    is PhotoUploadResult.Success -> {
+                        photoPath = result.path
+                        Toast.makeText(context, R.string.task_detail_updated, Toast.LENGTH_SHORT).show()
+                    }
+                    PhotoUploadResult.Unauthorized -> authFailure()
+                    PhotoUploadResult.NetworkError,
+                    is PhotoUploadResult.ServerError -> {
+                        Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }.start()
     }
 
     fun loadTask() {
@@ -1049,26 +1272,26 @@ fun TaskDetailScreen(taskId: Int) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 56.dp, end = 18.dp, bottom = 24.dp)
+                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
         ) {
             Text(
                 text = task?.title ?: stringResource(R.string.task_detail_title),
                 modifier = Modifier.fillMaxWidth(),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = task?.status?.uppercase(Locale.getDefault()).orEmpty(),
+                text = taskStatusLabel(task?.status).uppercase(Locale.getDefault()),
                 modifier = Modifier.padding(top = 4.dp),
                 color = colorResource(R.color.dashboard_text_secondary),
                 fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Medium
             )
 
             SettingsPanel(Modifier.padding(top = 22.dp)) {
                 TaskDetailField(R.string.task_detail_description, task?.description.orEmpty())
-                TaskDetailField(R.string.task_detail_status, task?.status.orEmpty())
+                TaskDetailField(R.string.task_detail_status, taskStatusLabel(task?.status))
                 TaskDetailField(R.string.task_detail_estimated_end_date, task?.estimatedEndDate?.take(10).orEmpty())
                 TaskDetailField(R.string.task_detail_actual_end_date, task?.actualEndDate?.take(10).orEmpty())
                 TaskDetailField(R.string.task_detail_estimated_time, task?.estimatedTime?.toString().orEmpty())
@@ -1076,7 +1299,26 @@ fun TaskDetailScreen(taskId: Int) {
                 TaskDetailField(R.string.task_detail_work_date, task?.workDate?.take(10).orEmpty())
                 TaskDetailField(R.string.task_detail_location, task?.location.orEmpty())
                 TaskDetailField(R.string.task_detail_observation, task?.observation.orEmpty())
+                TaskDetailField(
+                    R.string.task_detail_photo,
+                    when {
+                        photoPath.isNotBlank() -> photoApi.photoUrl(photoPath)
+                        !task?.photo.isNullOrBlank() -> photoApi.photoUrl(task?.photo.orEmpty())
+                        else -> ""
+                    }
+                )
             }
+
+            FilledActionButton(
+                text = stringResource(R.string.task_detail_upload_photo),
+                colorResId = R.color.login_button,
+                radius = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .height(42.dp),
+                onClick = { photoPicker.launch("image/*") }
+            )
 
             SettingsPanel(Modifier.padding(top = 16.dp)) {
                 Text(
@@ -1167,28 +1409,39 @@ fun TaskDetailScreen(taskId: Int) {
                 onClick = {
                     if (isSaving) return@FilledActionButton
                     mutate(
-                        action = { token -> taskApi.complete(token, taskId, workDate, observation.trim()) },
+                        action = { token ->
+                            taskApi.complete(
+                                token,
+                                taskId,
+                                workDate,
+                                observation.trim(),
+                                photo = photoPath.ifBlank { task?.photo },
+                                location = task?.location
+                            )
+                        },
                         successMessage = R.string.task_detail_updated
                     )
                 }
             )
-            FilledActionButton(
-                text = stringResource(R.string.task_detail_delete),
-                colorResId = R.color.settings_logout,
-                radius = 6.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .height(46.dp),
-                onClick = {
-                    if (isSaving) return@FilledActionButton
-                    mutate(
-                        action = { token -> taskApi.delete(token, taskId) },
-                        successMessage = R.string.task_detail_deleted,
-                        afterSuccess = { activity.finish() }
-                    )
-                }
-            )
+            if (canManageTasks) {
+                FilledActionButton(
+                    text = stringResource(R.string.task_detail_delete),
+                    colorResId = R.color.settings_logout,
+                    radius = 6.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .height(46.dp),
+                    onClick = {
+                        if (isSaving) return@FilledActionButton
+                        mutate(
+                            action = { token -> taskApi.delete(token, taskId) },
+                            successMessage = R.string.task_detail_deleted,
+                            afterSuccess = { activity.finish() }
+                        )
+                    }
+                )
+            }
         }
     }
 }
@@ -1207,8 +1460,30 @@ fun AdminScreen() {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var role by remember { mutableStateOf("user") }
+    var active by remember { mutableStateOf(true) }
+    var editingUserId by remember { mutableStateOf<Int?>(null) }
     var requiredError by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
+
+    fun clearForm() {
+        editingUserId = null
+        name = ""
+        username = ""
+        email = ""
+        password = ""
+        role = "user"
+        active = true
+    }
+
+    fun loadUserIntoForm(user: ApiUser) {
+        editingUserId = user.userId
+        name = user.name
+        username = user.username
+        email = user.email
+        password = ""
+        role = user.role.ifBlank { "user" }
+        active = user.active
+    }
 
     fun handleAuthFailure() {
         sessionManager.clear()
@@ -1287,19 +1562,22 @@ fun AdminScreen() {
 
     val adminCount = users.count { it.role == "admin" }
     val managerCount = users.count { it.role == "project_manager" }
+    val roleUserLabel = stringResource(R.string.admin_role_user)
+    val roleManagerLabel = stringResource(R.string.admin_role_manager)
+    val roleAdminLabel = stringResource(R.string.admin_role_admin)
 
     AppScaffold(selectedDestination = Destination.ADMIN) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 66.dp, end = 18.dp, bottom = 24.dp)
+                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
         ) {
             Text(
                 text = stringResource(R.string.admin_title),
                 modifier = Modifier.fillMaxWidth(),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
@@ -1325,13 +1603,13 @@ fun AdminScreen() {
                     modifier = Modifier.weight(1f)
                 )
                 AdminMetricCard(
-                    label = "Admins",
+                    label = stringResource(R.string.admin_metric_admins),
                     value = adminCount.toString(),
                     colorResId = R.color.project_purple,
                     modifier = Modifier.weight(1f)
                 )
                 AdminMetricCard(
-                    label = "Gestores",
+                    label = stringResource(R.string.admin_metric_managers),
                     value = managerCount.toString(),
                     colorResId = R.color.project_green,
                     modifier = Modifier.weight(1f)
@@ -1407,17 +1685,31 @@ fun AdminScreen() {
                     Column(Modifier.weight(1f)) {
                         CreateTaskLabelNoTop(R.string.admin_role)
                         SelectInput(
-                            selected = role.displayRole(),
-                            values = listOf("Utilizador", "Gestor", "Admin"),
+                            selected = roleLabel(role),
+                            values = listOf(roleUserLabel, roleManagerLabel, roleAdminLabel),
                             onSelected = { selected ->
                                 role = when (selected) {
-                                    "Admin" -> "admin"
-                                    "Gestor" -> "project_manager"
+                                    roleAdminLabel -> "admin"
+                                    roleManagerLabel -> "project_manager"
                                     else -> "user"
                                 }
                             }
                         )
                     }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.admin_active),
+                        modifier = Modifier.weight(1f),
+                        color = colorResource(R.color.dashboard_text_primary),
+                        fontSize = 14.sp
+                    )
+                    Switch(checked = active, onCheckedChange = { active = it })
                 }
                 if (requiredError) {
                     Text(
@@ -1427,8 +1719,22 @@ fun AdminScreen() {
                         fontSize = 12.sp
                     )
                 }
+                if (editingUserId != null) {
+                    FilledActionButton(
+                        text = stringResource(R.string.admin_cancel_edit),
+                        colorResId = R.color.task_status_gray_text,
+                        radius = 6.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .height(42.dp),
+                        onClick = { clearForm() }
+                    )
+                }
                 FilledActionButton(
-                    text = stringResource(R.string.admin_save_user),
+                    text = stringResource(
+                        if (editingUserId == null) R.string.admin_save_user else R.string.admin_update_user
+                    ),
                     colorResId = R.color.login_button,
                     radius = 6.dp,
                     modifier = Modifier
@@ -1439,37 +1745,53 @@ fun AdminScreen() {
                         if (isSaving) {
                             return@FilledActionButton
                         }
+                        val isEdit = editingUserId != null
                         if (
                             name.trim().isEmpty() ||
                             username.trim().isEmpty() ||
                             email.trim().isEmpty() ||
-                            password.length < 6
+                            (!isEdit && password.length < 6)
                         ) {
                             requiredError = true
                             return@FilledActionButton
                         }
                         isSaving = true
+                        val userId = editingUserId
                         mutate(
                             mutation = { token ->
-                                adminApi.createUser(
-                                    token,
-                                    CreateUserInput(
-                                        name = name.trim(),
-                                        username = username.trim(),
-                                        email = email.trim(),
-                                        password = password,
-                                        role = role
+                                if (userId == null) {
+                                    adminApi.createUser(
+                                        token,
+                                        CreateUserInput(
+                                            name = name.trim(),
+                                            username = username.trim(),
+                                            email = email.trim(),
+                                            password = password,
+                                            role = role,
+                                            active = active
+                                        )
                                     )
-                                )
+                                } else {
+                                    adminApi.updateUser(
+                                        token,
+                                        userId,
+                                        UpdateUserInput(
+                                            name = name.trim(),
+                                            username = username.trim(),
+                                            email = email.trim(),
+                                            password = password.takeIf { it.length >= 6 },
+                                            role = role,
+                                            active = active
+                                        )
+                                    )
+                                }
                             },
-                            successMessageResId = R.string.admin_create_success,
-                            onSuccess = {
-                                name = ""
-                                username = ""
-                                email = ""
-                                password = ""
-                                role = "user"
+                            successMessageResId = if (userId == null) {
+                                R.string.admin_create_success
+                            } else {
+                                R.string.admin_update_success
                             },
+                            onSuccess = { clearForm() },
                             onFinished = { isSaving = false }
                         )
                     }
@@ -1502,11 +1824,17 @@ fun AdminScreen() {
                     canDelete = user.userId != currentUser?.userId,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp),
+                        .padding(bottom = 10.dp)
+                        .clickable { loadUserIntoForm(user) },
                     onDelete = {
                         mutate(
                             mutation = { token -> adminApi.deleteUser(token, user.userId) },
-                            successMessageResId = R.string.admin_delete_success
+                            successMessageResId = R.string.admin_delete_success,
+                            onSuccess = {
+                                if (editingUserId == user.userId) {
+                                    clearForm()
+                                }
+                            }
                         )
                     }
                 )
@@ -1519,6 +1847,10 @@ fun AdminScreen() {
 fun SettingsScreen() {
     val context = LocalContext.current
     val viewModel = remember { SettingsViewModel() }
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val authApi = remember { AuthApi() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val currentUser = remember { sessionManager.currentUser() }
     var language by remember { mutableStateOf(viewModel.getState(context).language) }
     val englishSelected = LocaleHelper.LANGUAGE_ENGLISH == language
     val currentLanguageName = stringResource(
@@ -1530,13 +1862,13 @@ fun SettingsScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 66.dp, end = 18.dp, bottom = 24.dp)
+                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
         ) {
             Text(
                 text = stringResource(R.string.settings_title),
                 modifier = Modifier.fillMaxWidth(),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 28.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
@@ -1556,7 +1888,7 @@ fun SettingsScreen() {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = stringResource(R.string.settings_user_name),
+                    text = currentUser?.name ?: stringResource(R.string.settings_unknown_user),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp),
@@ -1565,7 +1897,7 @@ fun SettingsScreen() {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = stringResource(R.string.settings_user_email),
+                    text = currentUser?.email.orEmpty(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 2.dp),
@@ -1648,7 +1980,18 @@ fun SettingsScreen() {
                         .fillMaxWidth()
                         .padding(top = 14.dp)
                         .height(46.dp),
-                    onClick = { restartRoot(context, MainActivity::class.java) }
+                    onClick = {
+                        val token = sessionManager.token()
+                        Thread {
+                            if (!token.isNullOrBlank()) {
+                                authApi.logout(token)
+                            }
+                            sessionManager.clear()
+                            mainHandler.post {
+                                restartRoot(context, MainActivity::class.java)
+                            }
+                        }.start()
+                    }
                 )
             }
         }
@@ -1755,6 +2098,12 @@ private fun LanguageSelector(
     modifier: Modifier = Modifier,
     onLanguageSelected: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    val languageCode = if (LocaleHelper.getSavedLanguage(context) == LocaleHelper.LANGUAGE_ENGLISH) {
+        "EN"
+    } else {
+        "PT"
+    }
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
         Row(
@@ -1765,10 +2114,11 @@ private fun LanguageSelector(
         ) {
             Image(painterResource(R.drawable.ic_globe), contentDescription = null, modifier = Modifier.size(18.dp))
             Text(
-                text = stringResource(R.string.login_language),
+                text = languageCode,
                 modifier = Modifier.padding(start = 4.dp),
                 color = colorResource(R.color.login_text_secondary),
-                fontSize = 16.sp
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
             )
             Image(
                 painterResource(R.drawable.ic_chevron_down),
@@ -1881,7 +2231,7 @@ private fun DashboardSummaryCard(
             Text(
                 text = count.toString(),
                 color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 30.sp,
+                fontSize = 26.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -2038,6 +2388,12 @@ private fun ProjectCard(
                     color = colorResource(R.color.dashboard_text_secondary),
                     fontSize = 13.sp
                 )
+                Text(
+                    text = stringResource(R.string.project_status, project.status),
+                    modifier = Modifier.padding(top = 2.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 12.sp
+                )
             }
         }
         Text(
@@ -2113,9 +2469,14 @@ private fun ProjectTaskCard(
 }
 
 @Composable
-private fun MemberRow(member: ProjectMember, modifier: Modifier = Modifier) {
+private fun MemberRow(
+    member: ProjectMember,
+    modifier: Modifier = Modifier,
+    onRemove: (() -> Unit)? = null
+) {
     Row(
         modifier = modifier
+            .height(58.dp)
             .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
             .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -2130,6 +2491,17 @@ private fun MemberRow(member: ProjectMember, modifier: Modifier = Modifier) {
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
+        if (onRemove != null) {
+            FilledActionButton(
+                text = stringResource(R.string.project_remove_member),
+                colorResId = R.color.settings_logout,
+                radius = 6.dp,
+                modifier = Modifier
+                    .width(92.dp)
+                    .height(34.dp),
+                onClick = onRemove
+            )
+        }
     }
 }
 
@@ -2223,6 +2595,15 @@ private fun AdminUserRow(
                 overflow = TextOverflow.Ellipsis
             )
             RoleBadge(user.role, Modifier.padding(top = 7.dp))
+            if (!user.active) {
+                Text(
+                    text = stringResource(R.string.admin_user_inactive),
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = colorResource(R.color.settings_logout),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         if (canDelete) {
             FilledActionButton(
@@ -2264,13 +2645,13 @@ private fun RoleBadge(role: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(colorResource(ApiUser(0, "", "", role).roleSoftColorResId()))
+            .background(colorResource(roleSoftColorResId(role)))
             .padding(horizontal = 8.dp, vertical = 3.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = role.displayRole(),
-            color = colorResource(ApiUser(0, "", "", role).roleColorResId()),
+            text = roleLabel(role),
+            color = colorResource(roleColorResId(role)),
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1
@@ -2286,15 +2667,26 @@ private fun ApiUser.canManageProjects(): Boolean {
     return role == "admin" || role == "project_manager"
 }
 
-private fun String.displayRole(): String {
-    return when (this) {
-        "admin" -> "Admin"
-        "project_manager" -> "Gestor"
-        else -> "Utilizador"
+@Composable
+private fun roleLabel(role: String): String {
+    return when (role) {
+        "admin" -> stringResource(R.string.admin_role_admin)
+        "project_manager" -> stringResource(R.string.admin_role_manager)
+        else -> stringResource(R.string.admin_role_user)
     }
 }
 
-private fun ApiUser.roleColorResId(): Int {
+@Composable
+private fun taskStatusLabel(statusKey: String?): String {
+    return when (statusKey?.lowercase(Locale.getDefault())) {
+        "completed" -> stringResource(R.string.task_status_completed)
+        "blocked" -> stringResource(R.string.task_status_blocked)
+        "in_progress" -> stringResource(R.string.task_status_in_progress)
+        else -> stringResource(R.string.task_status_pending)
+    }
+}
+
+private fun roleColorResId(role: String): Int {
     return when (role) {
         "admin" -> R.color.project_purple
         "project_manager" -> R.color.project_green
@@ -2302,13 +2694,17 @@ private fun ApiUser.roleColorResId(): Int {
     }
 }
 
-private fun ApiUser.roleSoftColorResId(): Int {
+private fun roleSoftColorResId(role: String): Int {
     return when (role) {
         "admin" -> R.color.project_purple_soft
         "project_manager" -> R.color.project_green_soft
         else -> R.color.task_status_gray_bg
     }
 }
+
+private fun ApiUser.roleColorResId(): Int = roleColorResId(role)
+
+private fun ApiUser.roleSoftColorResId(): Int = roleSoftColorResId(role)
 
 private fun currentDateString(): String {
     val calendar = Calendar.getInstance()
@@ -2390,7 +2786,7 @@ private fun StatusBadge(task: DashboardTask, height: Dp, minWidth: Dp, modifier:
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = (task.statusText ?: stringResource(task.statusResId)).uppercase(Locale.getDefault()),
+            text = taskStatusLabel(task.statusText).uppercase(Locale.getDefault()),
             color = colorResource(task.statusTextColorResId),
             fontSize = 8.sp,
             fontWeight = FontWeight.Bold,

@@ -6,6 +6,7 @@ import android.os.Looper
 import android.text.TextUtils
 import android.util.Patterns
 import androidx.annotation.StringRes
+import com.example.commov.BuildConfig
 import com.example.commov.R
 import com.example.commov.data.local.SessionManager
 import com.example.commov.data.remote.AuthApi
@@ -22,7 +23,11 @@ class LoginViewModel(
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var model = LoginModel("admin@commov.local", "admin123", false)
+    private var model = if (BuildConfig.DEBUG) {
+        LoginModel("admin@commov.local", "admin123", false)
+    } else {
+        LoginModel("", "", false)
+    }
     private var observer: StateObserver? = null
     private var isLoading = false
 

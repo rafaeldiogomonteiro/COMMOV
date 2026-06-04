@@ -26,6 +26,9 @@ const photoUploadDir = "photos/image"
 func (r *UserRouter) Register(chiRouter chi.Router) {
 	chiRouter.Get("/users", r.list)
 	chiRouter.Post("/users", r.create)
+	chiRouter.Get("/users/{userId}", r.get)
+	chiRouter.Put("/users/{userId}", r.update)
+	chiRouter.Patch("/users/{userId}", r.update)
 	chiRouter.Delete("/users/{userId}", r.delete)
 	chiRouter.Post("/photos/image", r.uploadPhoto)
 	chiRouter.Handle("/photos/image/*", http.StripPrefix("/photos/image/", http.FileServer(http.Dir(photoUploadDir))))
@@ -71,13 +74,17 @@ func (r *UserRouter) create(w http.ResponseWriter, req *http.Request) {
 		Password string `json:"password"`
 		Photo    string `json:"photo"`
 		Role     string `json:"role"`
+		Active   *bool  `json:"active"`
 	}
 	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	trueVal := true
+	active := true
+	if input.Active != nil {
+		active = *input.Active
+	}
 	user, err := r.UserService.Create(
 		req.Context(),
 		actor.UserID,
@@ -87,7 +94,7 @@ func (r *UserRouter) create(w http.ResponseWriter, req *http.Request) {
 		input.Password,
 		input.Photo,
 		input.Role,
-		&trueVal,
+		&active,
 	)
 	if err != nil {
 		writeUserServiceError(w, err)
@@ -95,6 +102,82 @@ func (r *UserRouter) create(w http.ResponseWriter, req *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, user)
+}
+
+func (r *UserRouter) get(w http.ResponseWriter, req *http.Request) {
+	actor, loggedIn, err := r.AuthService.CheckLogin(req.Context(), authToken(req))
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+	if !loggedIn {
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	userID, err := strconv.Atoi(chi.URLParam(req, "userId"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "userId is invalid")
+		return
+	}
+
+	user, err := r.UserService.Get(req.Context(), actor.UserID, userID)
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, user)
+}
+
+func (r *UserRouter) update(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+
+	actor, loggedIn, err := r.AuthService.CheckLogin(req.Context(), authToken(req))
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+	if !loggedIn {
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	userID, err := strconv.Atoi(chi.URLParam(req, "userId"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "userId is invalid")
+		return
+	}
+
+	var input struct {
+		Name     *string `json:"name"`
+		Username *string `json:"username"`
+		Email    *string `json:"email"`
+		Password *string `json:"password"`
+		Photo    *string `json:"photo"`
+		Role     *string `json:"role"`
+		Active   *bool   `json:"active"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user, err := r.UserService.Update(req.Context(), actor.UserID, userID, services.UserUpdateInput{
+		Name:     input.Name,
+		Username: input.Username,
+		Email:    input.Email,
+		Password: input.Password,
+		Photo:    input.Photo,
+		Role:     input.Role,
+		Active:   input.Active,
+	})
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, user)
 }
 
 func (r *UserRouter) delete(w http.ResponseWriter, req *http.Request) {
@@ -124,6 +207,14 @@ func (r *UserRouter) delete(w http.ResponseWriter, req *http.Request) {
 
 func (r *UserRouter) uploadPhoto(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
+
+	if _, loggedIn, err := r.AuthService.CheckLogin(req.Context(), authToken(req)); err != nil {
+		writeUserServiceError(w, err)
+		return
+	} else if !loggedIn {
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
 
 	req.Body = http.MaxBytesReader(w, req.Body, 10<<20)
 	if err := req.ParseMultipartForm(10 << 20); err != nil {

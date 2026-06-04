@@ -97,6 +97,59 @@ class ProjectsApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
+    fun updateProject(token: String, projectId: Int, input: UpdateProjectInput): ProjectMutationResult {
+        return sendJson(
+            token = token,
+            path = "/projects/$projectId",
+            method = "PUT",
+            body = JSONObject().apply {
+                input.name?.let { put("name", it) }
+                input.description?.let { put("description", it) }
+                input.status?.let { put("status", it) }
+                input.managerId?.let { put("managerId", it) }
+                input.startDate?.let { put("startDate", it) }
+                input.estimatedEndDate?.let { put("estimatedEndDate", it) }
+                input.actualEndDate?.let { put("actualEndDate", it) }
+            }
+        )
+    }
+
+    fun deleteProject(token: String, projectId: Int): ProjectMutationResult {
+        val connection = authedConnection("/projects/$projectId", token, "DELETE")
+        return try {
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_NO_CONTENT -> ProjectMutationResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> ProjectMutationResult.Unauthorized
+                else -> ProjectMutationResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            ProjectMutationResult.NetworkError
+        } catch (_: Exception) {
+            ProjectMutationResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun removeMember(token: String, projectId: Int, userId: Int): ProjectMutationResult {
+        val connection = authedConnection("/projects/$projectId/users/$userId", token, "DELETE")
+        return try {
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_NO_CONTENT -> ProjectMutationResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> ProjectMutationResult.Unauthorized
+                else -> ProjectMutationResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            ProjectMutationResult.NetworkError
+        } catch (_: Exception) {
+            ProjectMutationResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     fun createTask(token: String, projectId: Int, input: CreateTaskInput): CreateTaskResult {
         val connection = (URL("${baseUrl.trimEnd('/')}/projects/$projectId/tasks").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -142,22 +195,50 @@ class ProjectsApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
-    private fun getArray(path: String, token: String): RemoteArrayResult {
-        val connection = (URL("${baseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
+    private fun sendJson(token: String, path: String, method: String, body: JSONObject): ProjectMutationResult {
+        val connection = authedConnection(path, token, method).apply {
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+        }
+        return try {
+            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_OK -> ProjectMutationResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> ProjectMutationResult.Unauthorized
+                else -> ProjectMutationResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            ProjectMutationResult.NetworkError
+        } catch (_: Exception) {
+            ProjectMutationResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun authedConnection(path: String, token: String, method: String): HttpURLConnection {
+        return (URL("${baseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = method
             connectTimeout = 10_000
             readTimeout = 10_000
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Authorization", "Bearer $token")
         }
+    }
 
+    private fun HttpURLConnection.readBody(): String {
+        return if (responseCode in 200..299) {
+            inputStream.bufferedReader().use { it.readText() }
+        } else {
+            errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        }
+    }
+
+    private fun getArray(path: String, token: String): RemoteArrayResult {
+        val connection = authedConnection(path, token, "GET")
         return try {
-            val responseBody = if (connection.responseCode in 200..299) {
-                connection.inputStream.bufferedReader().use { it.readText() }
-            } else {
-                connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            }
-
+            val responseBody = connection.readBody()
             when (connection.responseCode) {
                 HttpURLConnection.HTTP_OK -> RemoteArrayResult.Success(JSONArray(responseBody))
                 HttpURLConnection.HTTP_UNAUTHORIZED -> RemoteArrayResult.Unauthorized
@@ -180,6 +261,11 @@ class ProjectsApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 name = json.getString("name"),
                 description = json.optString("description"),
                 status = json.optString("status", "active"),
+                managerId = json.optInt("managerId"),
+                createdBy = json.optInt("createdBy"),
+                startDate = json.optNullableString("startDate"),
+                estimatedEndDate = json.optNullableString("estimatedEndDate"),
+                actualEndDate = json.optNullableString("actualEndDate"),
                 tasks = emptyList(),
                 members = emptyList()
             )
@@ -215,8 +301,11 @@ class ProjectsApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             ApiUser(
                 userId = json.getInt("userId"),
                 name = json.getString("name"),
+                username = json.optString("username"),
                 email = json.getString("email"),
-                role = json.optString("role")
+                role = json.optString("role"),
+                active = json.optBoolean("active", true),
+                photo = json.optString("photo")
             )
         }
     }
@@ -249,6 +338,11 @@ data class ApiProject(
     val name: String,
     val description: String,
     val status: String,
+    val managerId: Int = 0,
+    val createdBy: Int = 0,
+    val startDate: String? = null,
+    val estimatedEndDate: String? = null,
+    val actualEndDate: String? = null,
     val tasks: List<ApiTask>,
     val members: List<ApiUser>
 )
@@ -256,8 +350,11 @@ data class ApiProject(
 data class ApiUser(
     val userId: Int,
     val name: String,
+    val username: String = "",
     val email: String,
-    val role: String
+    val role: String,
+    val active: Boolean = true,
+    val photo: String = ""
 )
 
 sealed interface ProjectsResult {
@@ -275,6 +372,23 @@ data class CreateProjectInput(
     val estimatedEndDate: String,
     val memberIds: List<Int>
 )
+
+data class UpdateProjectInput(
+    val name: String? = null,
+    val description: String? = null,
+    val status: String? = null,
+    val managerId: Int? = null,
+    val startDate: String? = null,
+    val estimatedEndDate: String? = null,
+    val actualEndDate: String? = null
+)
+
+sealed interface ProjectMutationResult {
+    data object Success : ProjectMutationResult
+    data object Unauthorized : ProjectMutationResult
+    data object NetworkError : ProjectMutationResult
+    data class ServerError(val message: String?) : ProjectMutationResult
+}
 
 data class CreateTaskInput(
     val userId: Int,

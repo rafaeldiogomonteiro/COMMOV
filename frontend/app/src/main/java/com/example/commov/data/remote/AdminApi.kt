@@ -42,6 +42,7 @@ class AdminApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 .put("password", input.password)
                 .put("photo", "")
                 .put("role", input.role)
+                .put("active", input.active)
                 .toString()
 
             connection.outputStream.use { output ->
@@ -51,6 +52,42 @@ class AdminApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             val responseBody = connection.readBody()
             when (connection.responseCode) {
                 HttpURLConnection.HTTP_CREATED -> AdminMutationResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> AdminMutationResult.Unauthorized
+                HttpURLConnection.HTTP_FORBIDDEN -> AdminMutationResult.Forbidden
+                else -> AdminMutationResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            AdminMutationResult.NetworkError
+        } catch (_: Exception) {
+            AdminMutationResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun updateUser(token: String, userId: Int, input: UpdateUserInput): AdminMutationResult {
+        val connection = authedConnection("/users/$userId", token, "PUT").apply {
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+        }
+
+        return try {
+            val body = JSONObject()
+            input.name?.let { body.put("name", it) }
+            input.username?.let { body.put("username", it) }
+            input.email?.let { body.put("email", it) }
+            input.password?.let { body.put("password", it) }
+            input.photo?.let { body.put("photo", it) }
+            input.role?.let { body.put("role", it) }
+            input.active?.let { body.put("active", it) }
+
+            connection.outputStream.use { output ->
+                output.write(body.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_OK -> AdminMutationResult.Success
                 HttpURLConnection.HTTP_UNAUTHORIZED -> AdminMutationResult.Unauthorized
                 HttpURLConnection.HTTP_FORBIDDEN -> AdminMutationResult.Forbidden
                 else -> AdminMutationResult.ServerError(errorMessage(responseBody))
@@ -108,8 +145,11 @@ class AdminApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             ApiUser(
                 userId = json.getInt("userId"),
                 name = json.getString("name"),
+                username = json.optString("username"),
                 email = json.getString("email"),
-                role = json.optString("role")
+                role = json.optString("role"),
+                active = json.optBoolean("active", true),
+                photo = json.optString("photo")
             )
         }
     }
@@ -125,7 +165,18 @@ data class CreateUserInput(
     val username: String,
     val email: String,
     val password: String,
-    val role: String
+    val role: String,
+    val active: Boolean = true
+)
+
+data class UpdateUserInput(
+    val name: String? = null,
+    val username: String? = null,
+    val email: String? = null,
+    val password: String? = null,
+    val photo: String? = null,
+    val role: String? = null,
+    val active: Boolean? = null
 )
 
 sealed interface AdminUsersResult {

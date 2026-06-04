@@ -33,10 +33,23 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         return sendJson(token, "/tasks/$taskId/time-spent", "POST", body)
     }
 
-    fun complete(token: String, taskId: Int, workDate: String, observation: String): TaskMutationResult {
+    fun complete(
+        token: String,
+        taskId: Int,
+        workDate: String,
+        observation: String,
+        photo: String? = null,
+        location: String? = null
+    ): TaskMutationResult {
         val body = JSONObject()
             .put("workDate", workDate)
             .put("observation", observation)
+        if (!photo.isNullOrBlank()) {
+            body.put("photo", photo)
+        }
+        if (!location.isNullOrBlank()) {
+            body.put("location", location)
+        }
         return sendJson(token, "/tasks/$taskId/complete", "PATCH", body)
     }
 

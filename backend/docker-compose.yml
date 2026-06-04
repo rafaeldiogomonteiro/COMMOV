@@ -32,6 +32,9 @@ services:
       DEFAULT_USER_PASS: ${DEFAULT_USER_PASS:-admin123}
     ports:
       - "8080:8080"
+    volumes:
+      - backend_photos:/app/photos
 
 volumes:
+  backend_photos:
   postgres_data:

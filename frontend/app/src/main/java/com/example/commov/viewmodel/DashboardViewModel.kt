@@ -25,7 +25,7 @@ class DashboardViewModel(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var observer: StateObserver? = null
-    private var state = mockState(userName = sessionManager.currentUser()?.name?.firstName() ?: "")
+    private var state = emptyState(userName = sessionManager.currentUser()?.name?.firstName().orEmpty())
 
     fun observe(observer: StateObserver) {
         this.observer = observer
@@ -106,55 +106,14 @@ class DashboardViewModel(
         observer?.onStateChanged(state)
     }
 
-    private fun mockState(userName: String): DashboardUiState {
+    private fun emptyState(userName: String): DashboardUiState {
         return DashboardUiState(
-            userName = userName.ifBlank { "Admin" },
-            pendingTasks = 12,
-            completedTasks = 48,
-            pendingProgress = 65,
-            completedProgress = 100,
-            tasks = listOf(
-                DashboardTask(
-                    R.string.task_code_review_title,
-                    R.string.task_code_review_meta,
-                    R.string.task_status_expired,
-                    R.drawable.ic_alert_triangle,
-                    R.color.task_red,
-                    R.color.task_red_soft,
-                    R.color.task_red_soft,
-                    R.color.task_red
-                ),
-                DashboardTask(
-                    R.string.task_api_docs_title,
-                    R.string.task_api_docs_meta,
-                    R.string.task_status_soon,
-                    R.drawable.ic_clock,
-                    R.color.task_orange,
-                    R.color.task_orange_soft,
-                    R.color.task_orange_soft,
-                    R.color.task_orange
-                ),
-                DashboardTask(
-                    R.string.task_alignment_title,
-                    R.string.task_alignment_meta,
-                    R.string.task_status_pending,
-                    R.drawable.ic_document,
-                    R.color.task_blue,
-                    R.color.task_blue_soft,
-                    R.color.task_status_gray_bg,
-                    R.color.task_status_gray_text
-                ),
-                DashboardTask(
-                    R.string.task_design_refactor_title,
-                    R.string.task_design_refactor_meta,
-                    R.string.task_status_pending,
-                    R.drawable.ic_design,
-                    R.color.task_blue,
-                    R.color.task_blue_soft,
-                    R.color.task_status_gray_bg,
-                    R.color.task_status_gray_text
-                )
-            ),
+            userName = userName,
+            pendingTasks = 0,
+            completedTasks = 0,
+            pendingProgress = 0,
+            completedProgress = 0,
+            tasks = emptyList(),
             requiresLogin = false
         )
     }
@@ -175,7 +134,7 @@ class DashboardViewModel(
         val normalizedStatus = status.lowercase(Locale.getDefault())
         val style = when (normalizedStatus) {
             "completed" -> TaskStyle(
-                status = "completed",
+                statusKey = "completed",
                 iconResId = R.drawable.ic_check_circle,
                 accentColorResId = R.color.project_green,
                 iconBackgroundColorResId = R.color.project_green_soft,
@@ -183,7 +142,7 @@ class DashboardViewModel(
                 statusTextColorResId = R.color.project_green
             )
             "blocked" -> TaskStyle(
-                status = "blocked",
+                statusKey = "blocked",
                 iconResId = R.drawable.ic_alert_triangle,
                 accentColorResId = R.color.task_red,
                 iconBackgroundColorResId = R.color.task_red_soft,
@@ -191,7 +150,7 @@ class DashboardViewModel(
                 statusTextColorResId = R.color.task_red
             )
             "in_progress" -> TaskStyle(
-                status = "in progress",
+                statusKey = "in_progress",
                 iconResId = R.drawable.ic_clock,
                 accentColorResId = R.color.task_orange,
                 iconBackgroundColorResId = R.color.task_orange_soft,
@@ -199,7 +158,7 @@ class DashboardViewModel(
                 statusTextColorResId = R.color.task_orange
             )
             else -> TaskStyle(
-                status = "pending",
+                statusKey = "pending",
                 iconResId = R.drawable.ic_document,
                 accentColorResId = R.color.task_blue,
                 iconBackgroundColorResId = R.color.task_blue_soft,
@@ -219,7 +178,7 @@ class DashboardViewModel(
             statusTextColorResId = style.statusTextColorResId,
             titleText = title,
             metaText = taskMeta(projectsById[projectId], estimatedEndDate),
-            statusText = style.status,
+            statusText = style.statusKey,
             taskId = taskId
         )
     }
@@ -239,7 +198,7 @@ class DashboardViewModel(
     }
 
     private data class TaskStyle(
-        val status: String,
+        val statusKey: String,
         val iconResId: Int,
         val accentColorResId: Int,
         val iconBackgroundColorResId: Int,

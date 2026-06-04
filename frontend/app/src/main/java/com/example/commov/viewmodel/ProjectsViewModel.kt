@@ -39,6 +39,10 @@ class ProjectsViewModel(
         refresh()
     }
 
+    fun reload() {
+        refresh()
+    }
+
     private fun refresh() {
         val token = sessionManager.token()
         if (token.isNullOrBlank()) {
@@ -78,10 +82,11 @@ class ProjectsViewModel(
 
     private fun ApiProject.toProject(index: Int): Project {
         val colors = projectColors(index)
-        val projectMembers = members.mapIndexed { memberIndex, user -> user.toProjectMember(memberIndex) }
-        val membersByUserId = members.mapIndexed { memberIndex, user ->
-            user.userId to user.toProjectMember(memberIndex)
-        }.toMap()
+        val manager = members.firstOrNull { it.userId == managerId }
+        val projectMembers = members.mapIndexed { memberIndex, user ->
+            user.toProjectMember(memberIndex, user.userId == managerId)
+        }
+        val membersByUserId = projectMembers.associateBy { it.userId }
 
         return Project(
             projectId = projectId,
@@ -99,15 +104,23 @@ class ProjectsViewModel(
             accentColorResId = colors.accentColorResId,
             badgeColorResId = colors.badgeColorResId,
             nameText = name,
-            descriptionText = description
+            descriptionText = description,
+            status = status,
+            managerId = managerId,
+            managerName = manager?.name,
+            startDate = startDate?.take(10),
+            estimatedEndDate = estimatedEndDate?.take(10),
+            actualEndDate = actualEndDate?.take(10)
         )
     }
 
-    private fun ApiUser.toProjectMember(index: Int): ProjectMember {
+    private fun ApiUser.toProjectMember(index: Int, isManager: Boolean): ProjectMember {
         return ProjectMember(
+            userId = userId,
             name = name,
             initials = initials(name),
-            avatarColorResId = avatarColor(index)
+            avatarColorResId = avatarColor(index),
+            isManager = isManager
         )
     }
 
@@ -115,7 +128,7 @@ class ProjectsViewModel(
         val normalizedStatus = status.lowercase(Locale.getDefault())
         val style = when (normalizedStatus) {
             "completed" -> TaskStyle(
-                status = "completed",
+                statusKey = "completed",
                 iconResId = R.drawable.ic_check_circle,
                 accentColorResId = R.color.project_green,
                 iconBackgroundColorResId = R.color.project_green_soft,
@@ -123,7 +136,7 @@ class ProjectsViewModel(
                 statusTextColorResId = R.color.project_green
             )
             "blocked" -> TaskStyle(
-                status = "blocked",
+                statusKey = "blocked",
                 iconResId = R.drawable.ic_alert_triangle,
                 accentColorResId = R.color.task_red,
                 iconBackgroundColorResId = R.color.task_red_soft,
@@ -131,7 +144,7 @@ class ProjectsViewModel(
                 statusTextColorResId = R.color.task_red
             )
             "in_progress" -> TaskStyle(
-                status = "in progress",
+                statusKey = "in_progress",
                 iconResId = R.drawable.ic_clock,
                 accentColorResId = R.color.task_orange,
                 iconBackgroundColorResId = R.color.task_orange_soft,
@@ -139,7 +152,7 @@ class ProjectsViewModel(
                 statusTextColorResId = R.color.task_orange
             )
             else -> TaskStyle(
-                status = "pending",
+                statusKey = "pending",
                 iconResId = R.drawable.ic_document,
                 accentColorResId = R.color.task_blue,
                 iconBackgroundColorResId = R.color.task_blue_soft,
@@ -159,7 +172,7 @@ class ProjectsViewModel(
             statusTextColorResId = style.statusTextColorResId,
             titleText = title,
             metaText = taskMeta(projectName, estimatedEndDate),
-            statusText = style.status,
+            statusText = style.statusKey,
             taskId = taskId
         )
     }
@@ -203,7 +216,7 @@ class ProjectsViewModel(
     )
 
     private data class TaskStyle(
-        val status: String,
+        val statusKey: String,
         val iconResId: Int,
         val accentColorResId: Int,
         val iconBackgroundColorResId: Int,

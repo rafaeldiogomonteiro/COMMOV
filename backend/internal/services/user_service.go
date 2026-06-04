@@ -194,6 +194,118 @@ func (s *UserService) List(ctx context.Context, actorUserID int) ([]entity.User,
 	return users, nil
 }
 
+func (s *UserService) Get(ctx context.Context, actorUserID int, userID int) (*entity.User, error) {
+	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
+		return nil, err
+	}
+	if userID <= 0 {
+		return nil, validationError("userId is invalid")
+	}
+
+	user, err := s.UserRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, notFoundError("user not found")
+		}
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	return user, nil
+}
+
+type UserUpdateInput struct {
+	Name     *string
+	Username *string
+	Email    *string
+	Password *string
+	Photo    *string
+	Role     *string
+	Active   *bool
+}
+
+func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, input UserUpdateInput) (*entity.User, error) {
+	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
+		return nil, err
+	}
+	if userID <= 0 {
+		return nil, validationError("userId is invalid")
+	}
+
+	user, err := s.UserRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, notFoundError("user not found")
+		}
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return nil, validationError("name is required")
+		}
+		user.Name = name
+	}
+	if input.Username != nil {
+		username := strings.TrimSpace(*input.Username)
+		if username == "" {
+			return nil, validationError("username is required")
+		}
+		exists, err := s.UserRepo.ExistsByUsername(ctx, username)
+		if err != nil {
+			return nil, fmt.Errorf("check username: %w", err)
+		}
+		if exists && !strings.EqualFold(user.Username, username) {
+			return nil, conflictError("username already exists")
+		}
+		user.Username = username
+	}
+	if input.Email != nil {
+		email := strings.ToLower(strings.TrimSpace(*input.Email))
+		if email == "" {
+			return nil, validationError("email is required")
+		}
+		exists, err := s.UserRepo.ExistsByEmail(ctx, email)
+		if err != nil {
+			return nil, fmt.Errorf("check email: %w", err)
+		}
+		if exists && !strings.EqualFold(user.Email, email) {
+			return nil, conflictError("email already exists")
+		}
+		user.Email = email
+	}
+	if input.Password != nil {
+		password := strings.TrimSpace(*input.Password)
+		if password == "" {
+			return nil, validationError("password cannot be empty")
+		}
+		passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, fmt.Errorf("hash password: %w", err)
+		}
+		user.Password = string(passwordHash)
+	}
+	if input.Photo != nil {
+		user.Photo = strings.TrimSpace(*input.Photo)
+	}
+	if input.Role != nil {
+		role := entity.UserRole(strings.TrimSpace(*input.Role))
+		if !entity.IsValidUserRole(role) {
+			return nil, validationError("invalid user role")
+		}
+		user.Role = role
+	}
+	if input.Active != nil {
+		user.Active = *input.Active
+	}
+
+	if err := s.UserRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("update user: %w", err)
+	}
+
+	return user, nil
+}
+
 func (s *UserService) Delete(ctx context.Context, actorUserID int, userID int) error {
 	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
 		return err
