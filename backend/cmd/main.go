@@ -51,7 +51,7 @@ func main() {
 		appLogger.Printf("default user created: %s", cfg.DefaultUser)
 	}
 
-	authRouter := &router.AuthRouter{AuthService: authService}
+	authRouter := &router.AuthRouter{AuthService: authService, UserService: userService}
 	userRouter := &router.UserRouter{UserService: userService, AuthService: authService}
 	projectRouter := &router.ProjectRouter{ProjectService: projectService, AuthService: authService}
 	taskRouter := &router.TaskRouter{TaskService: taskService, AuthService: authService}

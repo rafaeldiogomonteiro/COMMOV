@@ -177,6 +177,61 @@ func (s *UserService) Create(
 	return user, nil
 }
 
+// RegisterPublic creates a new user account without requiring an authenticated admin.
+// Intended for self-registration from the login screen. Role is forced to "user".
+func (s *UserService) RegisterPublic(ctx context.Context, name string, username string, email string, password string) (*entity.User, error) {
+	name = strings.TrimSpace(name)
+	username = strings.TrimSpace(username)
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	if err := validateUserIdentity(name, username, email); err != nil {
+		return nil, err
+	}
+	if password == "" {
+		return nil, validationError("password is required")
+	}
+	if len(password) < 6 {
+		return nil, validationError("password must have at least 6 characters")
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+
+	user := &entity.User{
+		Name:     name,
+		Username: username,
+		Email:    email,
+		Password: string(passwordHash),
+		Photo:    "",
+		Role:     entity.UserRoleUser,
+		Active:   true,
+	}
+
+	usernameExists, err := s.UserRepo.ExistsByUsername(ctx, user.Username)
+	if err != nil {
+		return nil, fmt.Errorf("check username: %w", err)
+	}
+	if usernameExists {
+		return nil, conflictError("username already exists")
+	}
+
+	emailExists, err := s.UserRepo.ExistsByEmail(ctx, user.Email)
+	if err != nil {
+		return nil, fmt.Errorf("check email: %w", err)
+	}
+	if emailExists {
+		return nil, conflictError("email already exists")
+	}
+
+	if err := s.UserRepo.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("create user: %w", err)
+	}
+
+	return user, nil
+}
+
 func (s *UserService) List(ctx context.Context, actorUserID int) ([]entity.User, error) {
 	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
 		return nil, err
