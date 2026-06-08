@@ -33,6 +33,9 @@
     <string name="project_unnamed">Projeto</string>
     <string name="project_tasks_count">%1$d tarefas</string>
     <string name="project_detail_back">Voltar aos projetos</string>
+    <string name="project_detail_no_tasks">Ainda não há tarefas neste projeto.</string>
+    <string name="project_detail_overview">Resumo</string>
+    <string name="action_back">Voltar</string>
     <string name="project_detail_tasks">Tarefas</string>
     <string name="project_detail_people">Equipa</string>
     <string name="project_create_project">Novo projeto</string>
@@ -89,6 +92,9 @@
     <string name="create_task_members_error">Não foi possível carregar os membros do projeto.</string>
     <string name="create_task_error">Não foi possível criar a tarefa.</string>
     <string name="task_detail_title">Tarefa</string>
+    <string name="task_detail_progress">Progresso de tempo</string>
+    <string name="task_detail_log_work">Registar trabalho</string>
+    <string name="task_detail_hours">%1$sh / %2$sh</string>
     <string name="task_detail_description">Descrição</string>
     <string name="task_detail_status">Estado</string>
     <string name="task_detail_estimated_end_date">Data estimada de fim</string>

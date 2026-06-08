@@ -33,6 +33,9 @@
     <string name="project_unnamed">Project</string>
     <string name="project_tasks_count">%1$d tasks</string>
     <string name="project_detail_back">Back to projects</string>
+    <string name="project_detail_no_tasks">No tasks in this project yet.</string>
+    <string name="project_detail_overview">Overview</string>
+    <string name="action_back">Back</string>
     <string name="project_detail_tasks">Tasks</string>
     <string name="project_detail_people">Team</string>
     <string name="project_create_project">New project</string>
@@ -89,6 +92,9 @@
     <string name="create_task_members_error">Could not load project members.</string>
     <string name="create_task_error">Could not create task.</string>
     <string name="task_detail_title">Task</string>
+    <string name="task_detail_progress">Time progress</string>
+    <string name="task_detail_log_work">Log work</string>
+    <string name="task_detail_hours">%1$sh / %2$sh</string>
     <string name="task_detail_description">Description</string>
     <string name="task_detail_status">Status</string>
     <string name="task_detail_estimated_end_date">Estimated end date</string>

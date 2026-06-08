@@ -532,115 +532,47 @@ fun ProjectsScreen() {
                         )
                     }
                 } else {
-                    BackLink(
-                        text = stringResource(R.string.project_detail_back),
-                        onClick = { selectedProjectId = null }
-                    )
-                    ProjectDetailHero(project = project)
-                    if (canManage) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            FilledActionButton(
-                                text = stringResource(R.string.project_edit),
-                                colorResId = R.color.login_button,
-                                radius = 6.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp),
-                                onClick = {
-                                    editName = project.nameText.orEmpty()
-                                    editDescription = project.descriptionText.orEmpty()
-                                    editStatus = project.status
-                                    showEditProject = true
-                                }
+                    ProjectDetailView(
+                        project = project,
+                        canManage = canManage,
+                        canCreateTasks = state.canCreateTasks,
+                        onBack = { selectedProjectId = null },
+                        onEdit = {
+                            editName = project.nameText.orEmpty()
+                            editDescription = project.descriptionText.orEmpty()
+                            editStatus = project.status
+                            showEditProject = true
+                        },
+                        onDelete = {
+                            runProjectMutation(
+                                mutation = { token -> projectsApi.deleteProject(token, project.projectId) },
+                                successMessageResId = R.string.project_deleted,
+                                onSuccess = { selectedProjectId = null }
                             )
-                            FilledActionButton(
-                                text = stringResource(R.string.project_delete),
-                                colorResId = R.color.settings_logout,
-                                radius = 6.dp,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(42.dp),
-                                onClick = {
-                                    runProjectMutation(
-                                        mutation = { token -> projectsApi.deleteProject(token, project.projectId) },
-                                        successMessageResId = R.string.project_deleted,
-                                        onSuccess = { selectedProjectId = null }
-                                    )
-                                }
+                        },
+                        onCreateTask = {
+                            val intent = Intent(context, CreateTaskActivity::class.java)
+                            intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_ID, project.projectId)
+                            intent.putExtra(
+                                CreateTaskActivity.EXTRA_PROJECT_NAME,
+                                project.nameText ?: context.getString(project.nameResId)
+                            )
+                            context.startActivity(intent)
+                        },
+                        onTaskClick = { taskId ->
+                            val intent = Intent(context, TaskDetailActivity::class.java)
+                            intent.putExtra(TaskDetailActivity.EXTRA_TASK_ID, taskId)
+                            context.startActivity(intent)
+                        },
+                        onRemoveMember = { member ->
+                            runProjectMutation(
+                                mutation = { token ->
+                                    projectsApi.removeMember(token, project.projectId, member.userId)
+                                },
+                                successMessageResId = R.string.project_member_removed
                             )
                         }
-                    }
-                    if (state.canCreateTasks) {
-                        FilledActionButton(
-                            text = stringResource(R.string.project_create_task),
-                            colorResId = R.color.login_button,
-                            radius = 8.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp, bottom = 4.dp)
-                                .height(48.dp),
-                            onClick = {
-                                val intent = Intent(context, CreateTaskActivity::class.java)
-                                intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_ID, project.projectId)
-                                intent.putExtra(
-                                    CreateTaskActivity.EXTRA_PROJECT_NAME,
-                                    project.nameText ?: context.getString(project.nameResId)
-                                )
-                                context.startActivity(intent)
-                            }
-                        )
-                    }
-                    SectionTitle(
-                        titleResId = R.string.project_detail_tasks,
-                        topPadding = 20.dp,
-                        trailing = project.tasks.size.toString()
                     )
-                    project.tasks.forEach { task ->
-                        ProjectTaskCard(
-                            projectTask = task,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(112.dp)
-                                .padding(bottom = 10.dp),
-                            onClick = {
-                                if (task.task.taskId > 0) {
-                                    val intent = Intent(context, TaskDetailActivity::class.java)
-                                    intent.putExtra(TaskDetailActivity.EXTRA_TASK_ID, task.task.taskId)
-                                    context.startActivity(intent)
-                                }
-                            }
-                        )
-                    }
-                    SectionTitle(
-                        titleResId = R.string.project_detail_people,
-                        topPadding = 18.dp,
-                        trailing = project.members.size.toString()
-                    )
-                    project.members.forEach { member ->
-                        MemberRow(
-                            member = member,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            onRemove = if (canManage && !member.isManager && member.userId > 0) {
-                                {
-                                    runProjectMutation(
-                                        mutation = { token ->
-                                            projectsApi.removeMember(token, project.projectId, member.userId)
-                                        },
-                                        successMessageResId = R.string.project_member_removed
-                                    )
-                                }
-                            } else {
-                                null
-                            }
-                        )
-                    }
                 }
             }
         }
@@ -693,175 +625,660 @@ fun ProjectsScreen() {
 }
 
 @Composable
-private fun ProjectDetailHero(project: Project) {
-    val projectName = project.nameText ?: stringResource(project.nameResId)
-    val projectDescription = project.descriptionText ?: stringResource(project.descriptionResId)
+private fun SubPageScaffold(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp)
-            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 12.dp)
-            .padding(18.dp)
+            .fillMaxSize()
+            .background(colorResource(R.color.dashboard_background))
+            .statusBarsPadding()
+            .navigationBarsPadding()
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
+        content()
+    }
+}
+
+@Composable
+private fun SubPageContent(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .screenContentPadding(bottom = 28.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun PageTopBar(
+    title: String,
+    subtitle: String? = null,
+    onBack: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(colorResource(R.color.dashboard_card))
+                .border(1.dp, colorResource(R.color.dashboard_card_stroke), CircleShape)
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_arrow_right),
+                contentDescription = stringResource(R.string.action_back),
                 modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(colorResource(project.badgeColorResId)),
-                contentAlignment = Alignment.Center
-            ) {
+                    .size(18.dp)
+                    .rotate(180f),
+                colorFilter = ColorFilter.tint(colorResource(R.color.dashboard_text_primary))
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 14.dp)
+        ) {
+            Text(
+                text = title,
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!subtitle.isNullOrBlank()) {
                 Text(
-                    text = project.initials,
-                    color = colorResource(project.accentColorResId),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 14.dp)
-            ) {
-                Text(
-                    text = projectName,
-                    color = colorResource(R.color.dashboard_text_primary),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = subtitle,
+                    modifier = Modifier.padding(top = 3.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                ProjectStatusChip(
-                    status = project.status,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
             }
         }
-        if (projectDescription.isNotBlank()) {
-            Text(
-                text = projectDescription,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 15.sp,
-                lineHeight = 21.sp
-            )
-        }
-        Row(
+    }
+}
+
+@Composable
+private fun ProjectDetailView(
+    project: Project,
+    canManage: Boolean,
+    canCreateTasks: Boolean,
+    onBack: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onCreateTask: () -> Unit,
+    onTaskClick: (Int) -> Unit,
+    onRemoveMember: (ProjectMember) -> Unit
+) {
+    val projectName = project.nameText ?: stringResource(project.nameResId)
+    val projectDescription = project.descriptionText ?: stringResource(project.descriptionResId)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        PageTopBar(
+            title = projectName,
+            subtitle = stringResource(R.string.project_detail_back),
+            onBack = onBack
+        )
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp),
+                .clip(RoundedCornerShape(18.dp))
+                .background(colorResource(project.accentColorResId))
+                .padding(20.dp)
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(Color.White.copy(alpha = 0.22f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = project.initials,
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 14.dp)
+                    ) {
+                        StatusPill(
+                            status = project.status,
+                            onDark = true
+                        )
+                        Text(
+                            text = stringResource(R.string.project_tasks_count, project.taskCount),
+                            modifier = Modifier.padding(top = 8.dp),
+                            color = Color.White.copy(alpha = 0.88f),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+                if (projectDescription.isNotBlank()) {
+                    Text(
+                        text = projectDescription,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        color = Color.White.copy(alpha = 0.92f),
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = stringResource(R.string.project_detail_overview).uppercase(Locale.getDefault()),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 22.dp, bottom = 10.dp),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            project.managerName?.let { managerName ->
-                ProjectMetaChip(
-                    label = stringResource(R.string.project_manager_label, managerName),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            if (!project.startDate.isNullOrBlank() && !project.estimatedEndDate.isNullOrBlank()) {
-                ProjectMetaChip(
-                    label = stringResource(R.string.project_dates, project.startDate, project.estimatedEndDate),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        project.actualEndDate?.takeIf { it.isNotBlank() }?.let { actualEnd ->
-            ProjectMetaChip(
-                label = stringResource(R.string.project_actual_end, actualEnd),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
+            DetailStatTile(
+                label = stringResource(R.string.create_project_start_date),
+                value = project.startDate?.take(10).orEmpty().ifBlank { "—" },
+                modifier = Modifier.weight(1f)
+            )
+            DetailStatTile(
+                label = stringResource(R.string.create_project_estimated_end_date),
+                value = project.estimatedEndDate?.take(10).orEmpty().ifBlank { "—" },
+                modifier = Modifier.weight(1f)
+            )
+            DetailStatTile(
+                label = stringResource(R.string.create_project_manager),
+                value = project.managerName.orEmpty().ifBlank { "—" },
+                modifier = Modifier.weight(1f)
             )
         }
-        if (project.members.isNotEmpty()) {
-            AvatarStack(
-                members = project.members,
-                avatarSize = 34.dp,
+
+        if (canCreateTasks) {
+            FilledActionButton(
+                text = stringResource(R.string.project_create_task),
+                colorResId = R.color.login_button,
+                radius = 12.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
-                    .padding(top = 16.dp)
+                    .padding(top = 18.dp)
+                    .height(50.dp),
+                onClick = onCreateTask
+            )
+        }
+
+        DetailSectionHeader(
+            title = stringResource(R.string.project_detail_tasks),
+            count = project.tasks.size,
+            topPadding = 24.dp
+        )
+        if (project.tasks.isEmpty()) {
+            EmptyStateCard(text = stringResource(R.string.project_detail_no_tasks))
+        } else {
+            project.tasks.forEach { projectTask ->
+                val taskId = projectTask.task.taskId
+                ProjectTaskListItem(
+                    projectTask = projectTask,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    onClick = if (taskId > 0) {
+                        { onTaskClick(taskId) }
+                    } else {
+                        null
+                    }
+                )
+            }
+        }
+
+        DetailSectionHeader(
+            title = stringResource(R.string.project_detail_people),
+            count = project.members.size,
+            topPadding = 20.dp
+        )
+        project.members.chunked(2).forEach { rowMembers ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                rowMembers.forEach { member ->
+                    TeamMemberCard(
+                        member = member,
+                        modifier = Modifier.weight(1f),
+                        onRemove = if (canManage && !member.isManager && member.userId > 0) {
+                            { onRemoveMember(member) }
+                        } else {
+                            null
+                        }
+                    )
+                }
+                if (rowMembers.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+
+        if (canManage) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 22.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlineActionButton(
+                    text = stringResource(R.string.project_edit),
+                    colorResId = R.color.bottom_nav_selected,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onEdit
+                )
+                OutlineActionButton(
+                    text = stringResource(R.string.project_delete),
+                    colorResId = R.color.settings_logout,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onDelete
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailSectionHeader(title: String, count: Int, topPadding: Dp) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = topPadding, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .background(colorResource(R.color.login_button))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = count.toString(),
+                color = colorResource(R.color.white),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }
 }
 
 @Composable
-private fun ProjectStatusChip(status: String, modifier: Modifier = Modifier) {
-    val normalized = status.lowercase(Locale.getDefault())
-    val background = when (normalized) {
-        "completed", "done" -> R.color.project_green_soft
-        "blocked", "cancelled" -> R.color.task_red_soft
-        "in_progress", "active" -> R.color.task_blue_soft
-        else -> R.color.task_status_gray_bg
-    }
-    val textColor = when (normalized) {
-        "completed", "done" -> R.color.project_green
-        "blocked", "cancelled" -> R.color.task_red
-        "in_progress", "active" -> R.color.bottom_nav_selected
-        else -> R.color.task_status_gray_text
-    }
-    Box(
+private fun DetailStatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Column(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(colorResource(background))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(colorResource(R.color.dashboard_card))
+            .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 12.dp)
     ) {
         Text(
-            text = status.replace('_', ' ').replaceFirstChar { it.uppercase() },
-            color = colorResource(textColor),
-            fontSize = 11.sp,
+            text = label.uppercase(Locale.getDefault()),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 9.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = value,
+            modifier = Modifier.padding(top = 6.dp),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
 
 @Composable
-private fun ProjectMetaChip(label: String, modifier: Modifier = Modifier) {
+private fun EmptyStateCard(text: String) {
     Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .background(colorResource(R.color.dashboard_muted))
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 28.dp),
+        contentAlignment = Alignment.Center
     ) {
         Text(
-            text = label,
+            text = text,
             color = colorResource(R.color.dashboard_text_secondary),
-            fontSize = 12.sp,
-            lineHeight = 16.sp
+            fontSize = 14.sp,
+            textAlign = TextAlign.Center
         )
     }
 }
 
 @Composable
-private fun BackLink(text: String, onClick: () -> Unit) {
+private fun ProjectTaskListItem(
+    projectTask: ProjectTask,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
+) {
+    val task = projectTask.task
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 4.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(colorResource(R.color.dashboard_card))
+            .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(14.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(44.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(colorResource(task.accentColorResId))
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp, end = 8.dp)
+        ) {
+            Text(
+                text = task.titleText ?: stringResource(task.titleResId),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = task.metaText ?: stringResource(task.metaResId),
+                modifier = Modifier.padding(top = 3.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        StatusPill(status = task.statusText ?: "pending")
         Image(
             painter = painterResource(R.drawable.ic_arrow_right),
             contentDescription = null,
             modifier = Modifier
-                .size(18.dp)
-                .rotate(180f),
-            colorFilter = ColorFilter.tint(colorResource(R.color.bottom_nav_selected))
+                .padding(start = 6.dp)
+                .size(16.dp),
+            colorFilter = ColorFilter.tint(colorResource(R.color.dashboard_text_secondary))
         )
+    }
+}
+
+@Composable
+private fun TeamMemberCard(
+    member: ProjectMember,
+    modifier: Modifier = Modifier,
+    onRemove: (() -> Unit)? = null
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(colorResource(R.color.dashboard_card))
+            .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(14.dp))
+            .padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Avatar(member = member, size = 44.dp)
+        Text(
+            text = member.name,
+            modifier = Modifier.padding(top = 10.dp),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+        if (member.isManager) {
+            Text(
+                text = stringResource(R.string.create_project_manager),
+                modifier = Modifier.padding(top = 4.dp),
+                color = colorResource(R.color.bottom_nav_selected),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        if (onRemove != null) {
+            Text(
+                text = stringResource(R.string.project_remove_member),
+                modifier = Modifier
+                    .padding(top = 10.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onRemove)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                color = colorResource(R.color.settings_logout),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusPill(
+    status: String,
+    modifier: Modifier = Modifier,
+    onDark: Boolean = false
+) {
+    val normalized = status.lowercase(Locale.getDefault())
+    val backgroundColor = if (onDark) {
+        Color.White.copy(alpha = 0.24f)
+    } else {
+        colorResource(
+            when (normalized) {
+                "completed", "done" -> R.color.project_green_soft
+                "blocked", "cancelled" -> R.color.task_red_soft
+                "in_progress", "active", "pending" -> R.color.task_blue_soft
+                else -> R.color.task_status_gray_bg
+            }
+        )
+    }
+    val textColor = if (onDark) {
+        Color.White
+    } else {
+        colorResource(
+            when (normalized) {
+                "completed", "done" -> R.color.project_green
+                "blocked", "cancelled" -> R.color.task_red
+                "in_progress", "active" -> R.color.bottom_nav_selected
+                else -> R.color.task_status_gray_text
+            }
+        )
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(backgroundColor)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = taskStatusLabel(status).uppercase(Locale.getDefault()),
+            color = textColor,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun OutlineActionButton(
+    text: String,
+    @ColorRes colorResId: Int,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.5.dp, colorResource(colorResId), RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
         Text(
             text = text,
-            modifier = Modifier.padding(start = 6.dp),
-            color = colorResource(R.color.bottom_nav_selected),
+            color = colorResource(colorResId),
             fontSize = 14.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
         )
+    }
+}
+
+@Composable
+private fun TaskInfoTile(
+    label: String,
+    value: String,
+    @DrawableRes iconResId: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(colorResource(R.color.dashboard_card))
+            .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(colorResource(R.color.task_blue_soft)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(iconResId),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 10.dp)
+        ) {
+            Text(
+                text = label.uppercase(Locale.getDefault()),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = value.ifBlank { "—" },
+                modifier = Modifier.padding(top = 3.dp),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun TaskProgressCard(estimatedTime: Double, timeSpent: Double) {
+    val progress = if (estimatedTime > 0) {
+        (timeSpent / estimatedTime).coerceIn(0.0, 1.0).toFloat()
+    } else {
+        0f
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(colorResource(R.color.dashboard_card))
+            .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(16.dp))
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.task_detail_progress),
+                modifier = Modifier.weight(1f),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(
+                    R.string.task_detail_hours,
+                    formatHours(timeSpent),
+                    formatHours(estimatedTime)
+                ),
+                color = colorResource(R.color.bottom_nav_selected),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 14.dp)
+                .height(10.dp)
+                .clip(RoundedCornerShape(5.dp))
+                .background(colorResource(R.color.dashboard_muted))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(colorResource(R.color.login_button))
+            )
+        }
+    }
+}
+
+private fun formatHours(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        String.format(Locale.US, "%.1f", value)
     }
 }
 
@@ -919,16 +1336,12 @@ fun CreateProjectScreen() {
 
     val managerOptions = users.filter { it.canManageProjects() }.map { it.label() }
 
-    AppScaffold(selectedDestination = Destination.PROJECTS) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .screenContentPadding(bottom = 24.dp)
-        ) {
-            ScreenHeader(
+    SubPageScaffold {
+        SubPageContent {
+            PageTopBar(
                 title = stringResource(R.string.create_project_title),
-                subtitle = stringResource(R.string.create_project_subtitle)
+                subtitle = stringResource(R.string.create_project_subtitle),
+                onBack = { activity.finish() }
             )
 
             FormSection(R.string.create_project_section_details) {
@@ -1159,16 +1572,12 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
         }.start()
     }
 
-    AppScaffold(selectedDestination = Destination.PROJECTS) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .screenContentPadding(bottom = 24.dp)
-        ) {
-            ScreenHeader(
+    SubPageScaffold {
+        SubPageContent {
+            PageTopBar(
                 title = stringResource(R.string.create_task_title),
-                subtitle = stringResource(R.string.create_task_subtitle, resolvedProjectName)
+                subtitle = stringResource(R.string.create_task_subtitle, resolvedProjectName),
+                onBack = { activity.finish() }
             )
 
             FormSection(R.string.create_task_section_details) {
@@ -1409,71 +1818,109 @@ fun TaskDetailScreen(taskId: Int) {
         loadTask()
     }
 
-    AppScaffold(selectedDestination = Destination.PROJECTS) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .screenContentPadding(bottom = 24.dp)
-        ) {
-            Text(
-                text = task?.title ?: stringResource(R.string.task_detail_title),
-                modifier = Modifier.fillMaxWidth(),
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = taskStatusLabel(task?.status).uppercase(Locale.getDefault()),
-                modifier = Modifier.padding(top = 4.dp),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+    SubPageScaffold {
+        SubPageContent {
+            PageTopBar(
+                title = task?.title ?: stringResource(R.string.task_detail_title),
+                subtitle = taskStatusLabel(task?.status),
+                onBack = { activity.finish() }
             )
 
-            SettingsPanel(Modifier.padding(top = 22.dp)) {
-                TaskDetailField(R.string.task_detail_description, task?.description.orEmpty())
-                TaskDetailField(R.string.task_detail_status, taskStatusLabel(task?.status))
-                TaskDetailField(R.string.task_detail_estimated_end_date, task?.estimatedEndDate?.take(10).orEmpty())
-                TaskDetailField(R.string.task_detail_actual_end_date, task?.actualEndDate?.take(10).orEmpty())
-                TaskDetailField(R.string.task_detail_estimated_time, task?.estimatedTime?.toString().orEmpty())
-                TaskDetailField(R.string.task_detail_time_spent, task?.timeSpent?.toString().orEmpty())
-                TaskDetailField(R.string.task_detail_work_date, task?.workDate?.take(10).orEmpty())
-                TaskDetailField(R.string.task_detail_location, task?.location.orEmpty())
-                TaskDetailField(R.string.task_detail_observation, task?.observation.orEmpty())
-                TaskDetailField(
-                    R.string.task_detail_photo,
-                    when {
-                        photoPath.isNotBlank() -> photoApi.photoUrl(photoPath)
-                        !task?.photo.isNullOrBlank() -> photoApi.photoUrl(task?.photo.orEmpty())
-                        else -> ""
-                    }
+            StatusPill(
+                status = task?.status ?: "pending",
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+
+            TaskProgressCard(
+                estimatedTime = task?.estimatedTime ?: 0.0,
+                timeSpent = task?.timeSpent ?: 0.0
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TaskInfoTile(
+                    label = stringResource(R.string.task_detail_estimated_end_date),
+                    value = task?.estimatedEndDate?.take(10).orEmpty(),
+                    iconResId = R.drawable.ic_calendar_clock,
+                    modifier = Modifier.weight(1f)
+                )
+                TaskInfoTile(
+                    label = stringResource(R.string.task_detail_location),
+                    value = task?.location.orEmpty(),
+                    iconResId = R.drawable.ic_design,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TaskInfoTile(
+                    label = stringResource(R.string.task_detail_work_date),
+                    value = task?.workDate?.take(10).orEmpty(),
+                    iconResId = R.drawable.ic_clock,
+                    modifier = Modifier.weight(1f)
+                )
+                TaskInfoTile(
+                    label = stringResource(R.string.task_detail_actual_end_date),
+                    value = task?.actualEndDate?.take(10).orEmpty(),
+                    iconResId = R.drawable.ic_check_circle,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
-            FilledActionButton(
-                text = stringResource(R.string.task_detail_upload_photo),
-                colorResId = R.color.login_button,
-                radius = 6.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-                    .height(42.dp),
-                onClick = { photoPicker.launch("image/*") }
-            )
+            if (!task?.description.isNullOrBlank()) {
+                FormSection(R.string.task_detail_description) {
+                    Text(
+                        text = task?.description.orEmpty(),
+                        color = colorResource(R.color.dashboard_text_primary),
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
 
-            SettingsPanel(Modifier.padding(top = 16.dp)) {
-                Text(
-                    text = stringResource(R.string.task_detail_add_time).uppercase(Locale.getDefault()),
-                    modifier = Modifier.fillMaxWidth(),
-                    color = colorResource(R.color.dashboard_text_secondary),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Row(
+            FormSection(R.string.task_detail_photo) {
+                val photoUrl = when {
+                    photoPath.isNotBlank() -> photoApi.photoUrl(photoPath)
+                    !task?.photo.isNullOrBlank() -> photoApi.photoUrl(task?.photo.orEmpty())
+                    else -> ""
+                }
+                if (photoUrl.isNotBlank()) {
+                    Text(
+                        text = photoUrl,
+                        color = colorResource(R.color.bottom_nav_selected),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                } else {
+                    Text(
+                        text = "—",
+                        color = colorResource(R.color.dashboard_text_secondary),
+                        fontSize = 14.sp
+                    )
+                }
+                FilledActionButton(
+                    text = stringResource(R.string.task_detail_upload_photo),
+                    colorResId = R.color.login_button,
+                    radius = 10.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 14.dp),
+                        .padding(top = 12.dp)
+                        .height(44.dp),
+                    onClick = { photoPicker.launch("image/*") }
+                )
+            }
+
+            FormSection(R.string.task_detail_log_work) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Column(Modifier.weight(1f)) {
@@ -1516,10 +1963,10 @@ fun TaskDetailScreen(taskId: Int) {
                 FilledActionButton(
                     text = stringResource(R.string.task_detail_add_time),
                     colorResId = R.color.login_button,
-                    radius = 6.dp,
+                    radius = 10.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 18.dp)
+                        .padding(top = 16.dp)
                         .height(46.dp),
                     onClick = {
                         if (isSaving) return@FilledActionButton
@@ -1543,11 +1990,11 @@ fun TaskDetailScreen(taskId: Int) {
             FilledActionButton(
                 text = stringResource(R.string.task_detail_complete),
                 colorResId = R.color.project_green,
-                radius = 6.dp,
+                radius = 12.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp)
-                    .height(46.dp),
+                    .padding(top = 20.dp)
+                    .height(50.dp),
                 onClick = {
                     if (isSaving) return@FilledActionButton
                     mutate(
@@ -1566,16 +2013,15 @@ fun TaskDetailScreen(taskId: Int) {
                 }
             )
             if (canManageTasks) {
-                FilledActionButton(
+                OutlineActionButton(
                     text = stringResource(R.string.task_detail_delete),
                     colorResId = R.color.settings_logout,
-                    radius = 6.dp,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 10.dp)
                         .height(46.dp),
                     onClick = {
-                        if (isSaving) return@FilledActionButton
+                        if (isSaving) return@OutlineActionButton
                         mutate(
                             action = { token -> taskApi.delete(token, taskId) },
                             successMessage = R.string.task_detail_deleted,
