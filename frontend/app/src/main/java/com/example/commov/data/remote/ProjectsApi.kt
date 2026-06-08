@@ -132,6 +132,65 @@ class ProjectsApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
+    fun getProject(token: String, projectId: Int): ProjectDetailResult {
+        val connection = authedConnection("/projects/$projectId", token, "GET")
+        return try {
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_OK -> {
+                    val json = JSONObject(responseBody)
+                    ProjectDetailResult.Success(
+                        ApiProject(
+                            projectId = json.getInt("projectId"),
+                            name = json.getString("name"),
+                            description = json.optString("description"),
+                            status = json.optString("status", "active"),
+                            managerId = json.optInt("managerId"),
+                            createdBy = json.optInt("createdBy"),
+                            startDate = json.optNullableString("startDate"),
+                            estimatedEndDate = json.optNullableString("estimatedEndDate"),
+                            actualEndDate = json.optNullableString("actualEndDate"),
+                            tasks = emptyList(),
+                            members = emptyList()
+                        )
+                    )
+                }
+                HttpURLConnection.HTTP_UNAUTHORIZED -> ProjectDetailResult.Unauthorized
+                else -> ProjectDetailResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            ProjectDetailResult.NetworkError
+        } catch (_: Exception) {
+            ProjectDetailResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun addMember(token: String, projectId: Int, userId: Int): ProjectMutationResult {
+        val connection = authedConnection("/projects/$projectId/users", token, "POST").apply {
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+        }
+        return try {
+            connection.outputStream.use {
+                it.write(JSONObject().put("userId", userId).toString().toByteArray(Charsets.UTF_8))
+            }
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_NO_CONTENT -> ProjectMutationResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> ProjectMutationResult.Unauthorized
+                else -> ProjectMutationResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            ProjectMutationResult.NetworkError
+        } catch (_: Exception) {
+            ProjectMutationResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     fun removeMember(token: String, projectId: Int, userId: Int): ProjectMutationResult {
         val connection = authedConnection("/projects/$projectId/users/$userId", token, "DELETE")
         return try {
@@ -411,6 +470,13 @@ sealed interface CreateProjectResult {
     data object Unauthorized : CreateProjectResult
     data object NetworkError : CreateProjectResult
     data class ServerError(val message: String?) : CreateProjectResult
+}
+
+sealed interface ProjectDetailResult {
+    data class Success(val project: ApiProject) : ProjectDetailResult
+    data object Unauthorized : ProjectDetailResult
+    data object NetworkError : ProjectDetailResult
+    data class ServerError(val message: String?) : ProjectDetailResult
 }
 
 sealed interface CreateTaskResult {

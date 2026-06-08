@@ -53,6 +53,12 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         return sendJson(token, "/tasks/$taskId/complete", "PATCH", body)
     }
 
+    fun updateTask(token: String, taskId: Int, input: UpdateTaskInput): TaskMutationResult {
+        val body = JSONObject()
+        input.userId?.let { body.put("userId", it) }
+        return sendJson(token, "/tasks/$taskId", "PUT", body)
+    }
+
     fun delete(token: String, taskId: Int): TaskMutationResult {
         val connection = authedConnection("/tasks/$taskId", token, "DELETE")
         return try {
@@ -147,6 +153,10 @@ sealed interface TaskResult {
     data object NetworkError : TaskResult
     data class ServerError(val message: String?) : TaskResult
 }
+
+data class UpdateTaskInput(
+    val userId: Int? = null
+)
 
 sealed interface TaskMutationResult {
     data object Success : TaskMutationResult
