@@ -66,3 +66,16 @@ func (r *UserRepo) Update(ctx context.Context, user *entity.User) error {
 func (r *UserRepo) Delete(ctx context.Context, userID int) error {
 	return r.DB.WithContext(ctx).Delete(&entity.User{}, "user_id = ?", userID).Error
 }
+
+func (r *UserRepo) CountActiveAdmins(ctx context.Context, excludeUserID int) (int64, error) {
+	query := r.DB.WithContext(ctx).
+		Model(&entity.User{}).
+		Where("role = ? AND active = ?", entity.UserRoleAdmin, true)
+	if excludeUserID > 0 {
+		query = query.Where("user_id <> ?", excludeUserID)
+	}
+
+	var count int64
+	err := query.Count(&count).Error
+	return count, err
+}

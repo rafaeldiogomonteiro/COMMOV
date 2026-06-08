@@ -5,15 +5,23 @@ info:
 
 http:
   method: POST
-  url: http://localhost:8080/login
+  url: "{{baseUrl}}/login"
   body:
     type: json
     data: |-
       {
-        "email":"admin@commov.local",
-        "password":"admin123" 
+        "email": "admin@commov.local",
+        "password": "admin123"
       }
   auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.getStatus() === 200) {
+          bru.setVar("token", res.getBody().token);
+        }
 
 settings:
   encodeUrl: true

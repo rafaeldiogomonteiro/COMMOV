@@ -12,7 +12,9 @@ import (
 	"gorm.io/gorm"
 )
 
-const defaultProjectStatus = "active"
+const defaultProjectStatus = entity.ProjectStatusActive
+
+const completedProjectStatus = entity.ProjectStatusCompleted
 
 type ProjectCreateInput struct {
 	Name             string
@@ -159,12 +161,9 @@ func (s *ProjectService) Update(ctx context.Context, actorUserID int, projectID 
 		project.Description = strings.TrimSpace(*input.Description)
 	}
 	if input.Status != nil {
-		status := strings.TrimSpace(*input.Status)
-		if status == "" {
-			return nil, validationError("status is required")
-		}
-		if len(status) > 50 {
-			return nil, validationError("status must be 50 characters or fewer")
+		status, ok := entity.NormalizeProjectStatus(*input.Status)
+		if !ok {
+			return nil, validationError("invalid project status")
 		}
 		project.Status = status
 	}
@@ -187,6 +186,13 @@ func (s *ProjectService) Update(ctx context.Context, actorUserID int, projectID 
 	if input.ActualEndDate != nil {
 		project.ActualEndDate = input.ActualEndDate
 	}
+	if entity.IsCompletedStatus(project.Status) {
+		if project.ActualEndDate == nil {
+			today := currentDate()
+			project.ActualEndDate = &today
+		}
+	}
+
 	if err := validateProjectDates(project.StartDate, project.EstimatedEndDate, project.ActualEndDate); err != nil {
 		return nil, err
 	}
@@ -368,14 +374,12 @@ func normalizeProjectText(name string, description string, status string) (strin
 	if len(name) > 160 {
 		return "", "", "", validationError("name must be 160 characters or fewer")
 	}
-	if status == "" {
-		status = defaultProjectStatus
-	}
-	if len(status) > 50 {
-		return "", "", "", validationError("status must be 50 characters or fewer")
+	normalizedStatus, ok := entity.NormalizeProjectStatus(status)
+	if !ok {
+		return "", "", "", validationError("invalid project status")
 	}
 
-	return name, description, status, nil
+	return name, description, normalizedStatus, nil
 }
 
 func validateProjectDates(startDate time.Time, estimatedEndDate time.Time, actualEndDate *time.Time) error {

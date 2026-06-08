@@ -49,6 +49,10 @@
     <string name="project_member_removed">Member removed.</string>
     <string name="project_action_error">Project action failed.</string>
     <string name="create_project_title">New project</string>
+    <string name="create_project_subtitle">Set up the project details and team.</string>
+    <string name="create_project_section_details">Project details</string>
+    <string name="create_project_section_leadership">Leadership</string>
+    <string name="create_project_section_schedule">Schedule</string>
     <string name="create_project_name">Name</string>
     <string name="create_project_description">Description</string>
     <string name="create_project_manager">Manager</string>
@@ -61,6 +65,9 @@
     <string name="create_project_error">Could not create project.</string>
     <string name="create_project_no_users">User list unavailable. The project will be created with you as manager.</string>
     <string name="create_task_title">New task</string>
+    <string name="create_task_subtitle">Add a task to %1$s.</string>
+    <string name="create_task_section_details">Task details</string>
+    <string name="create_task_section_schedule">Schedule and location</string>
     <string name="create_task_project">Project</string>
     <string name="create_task_user">Assignee</string>
     <string name="create_task_task_title">Title</string>

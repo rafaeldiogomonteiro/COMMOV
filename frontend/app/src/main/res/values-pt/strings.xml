@@ -49,6 +49,10 @@
     <string name="project_member_removed">Membro removido.</string>
     <string name="project_action_error">A ação do projeto falhou.</string>
     <string name="create_project_title">Novo projeto</string>
+    <string name="create_project_subtitle">Configure os detalhes e a equipa do projeto.</string>
+    <string name="create_project_section_details">Detalhes do projeto</string>
+    <string name="create_project_section_leadership">Liderança</string>
+    <string name="create_project_section_schedule">Calendário</string>
     <string name="create_project_name">Nome</string>
     <string name="create_project_description">Descrição</string>
     <string name="create_project_manager">Gestor</string>
@@ -61,6 +65,9 @@
     <string name="create_project_error">Não foi possível criar o projeto.</string>
     <string name="create_project_no_users">Lista de utilizadores indisponível. O projeto será criado consigo como gestor.</string>
     <string name="create_task_title">Nova tarefa</string>
+    <string name="create_task_subtitle">Adicionar uma tarefa a %1$s.</string>
+    <string name="create_task_section_details">Detalhes da tarefa</string>
+    <string name="create_task_section_schedule">Calendário e localização</string>
     <string name="create_task_project">Projeto</string>
     <string name="create_task_user">Responsável</string>
     <string name="create_task_task_title">Título</string>

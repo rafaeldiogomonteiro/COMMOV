@@ -1,0 +1,25 @@
+info:
+  name: users-create
+  type: http
+  seq: 10
+
+http:
+  method: POST
+  url: "{{baseUrl}}/users"
+  auth:
+    type: bearer
+    token: "{{token}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Demo User",
+        "username": "demouser",
+        "email": "demo@commov.local",
+        "password": "demo123",
+        "role": "user",
+        "active": true
+      }
+
+settings:
+  encodeUrl: true

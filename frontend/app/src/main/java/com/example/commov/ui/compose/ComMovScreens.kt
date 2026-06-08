@@ -28,9 +28,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -54,7 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.material3.Switch
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalConfiguration
@@ -149,7 +151,9 @@ fun LoginScreen() {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colorResource(R.color.login_background)),
+            .background(colorResource(R.color.login_background))
+            .statusBarsPadding()
+            .navigationBarsPadding(),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -263,6 +267,7 @@ fun LoginScreen() {
 fun DashboardScreen() {
     val context = LocalContext.current
     val activity = context.findActivity()
+    val sessionManager = remember { SessionManager(context.applicationContext) }
     val viewModel = remember { DashboardViewModel(context.applicationContext) }
     var state by remember {
         mutableStateOf(
@@ -295,10 +300,13 @@ fun DashboardScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 20.dp)
+                .screenContentPadding()
         ) {
             Text(
-                text = stringResource(R.string.dashboard_greeting, state.userName.ifBlank { "…" }),
+                text = stringResource(
+                    R.string.dashboard_greeting,
+                    state.userName.ifBlank { sessionManager.currentUser()?.name?.trim().orEmpty() }.ifBlank { "…" }
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
@@ -463,31 +471,25 @@ fun ProjectsScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 20.dp)
+                .screenContentPadding()
         ) {
-            Text(
-                text = if (project == null) {
-                    stringResource(R.string.projects_title)
-                } else {
-                    project.nameText ?: stringResource(project.nameResId)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = if (project == null) {
-                    stringResource(R.string.projects_subtitle)
-                } else {
-                    project.descriptionText ?: stringResource(project.descriptionResId)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 15.sp
-            )
+            if (project == null) {
+                Text(
+                    text = stringResource(R.string.projects_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = stringResource(R.string.projects_subtitle),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 15.sp
+                )
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -530,22 +532,16 @@ fun ProjectsScreen() {
                         )
                     }
                 } else {
-                    Text(
+                    BackLink(
                         text = stringResource(R.string.project_detail_back),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(36.dp)
-                            .clickable { selectedProjectId = null },
-                        color = colorResource(R.color.bottom_nav_selected),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                        onClick = { selectedProjectId = null }
                     )
-                    ProjectDetailMeta(project = project)
+                    ProjectDetailHero(project = project)
                     if (canManage) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 10.dp),
+                                .padding(top = 14.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             FilledActionButton(
@@ -583,11 +579,11 @@ fun ProjectsScreen() {
                         FilledActionButton(
                             text = stringResource(R.string.project_create_task),
                             colorResId = R.color.login_button,
-                            radius = 6.dp,
+                            radius = 8.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 6.dp, bottom = 8.dp)
-                                .height(46.dp),
+                                .padding(top = 12.dp, bottom = 4.dp)
+                                .height(48.dp),
                             onClick = {
                                 val intent = Intent(context, CreateTaskActivity::class.java)
                                 intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_ID, project.projectId)
@@ -599,7 +595,11 @@ fun ProjectsScreen() {
                             }
                         )
                     }
-                    SectionTitle(R.string.project_detail_tasks, topPadding = 18.dp)
+                    SectionTitle(
+                        titleResId = R.string.project_detail_tasks,
+                        topPadding = 20.dp,
+                        trailing = project.tasks.size.toString()
+                    )
                     project.tasks.forEach { task ->
                         ProjectTaskCard(
                             projectTask = task,
@@ -616,7 +616,11 @@ fun ProjectsScreen() {
                             }
                         )
                     }
-                    SectionTitle(R.string.project_detail_people, topPadding = 16.dp)
+                    SectionTitle(
+                        titleResId = R.string.project_detail_people,
+                        topPadding = 18.dp,
+                        trailing = project.members.size.toString()
+                    )
                     project.members.forEach { member ->
                         MemberRow(
                             member = member,
@@ -689,37 +693,175 @@ fun ProjectsScreen() {
 }
 
 @Composable
-private fun ProjectDetailMeta(project: Project) {
-    SettingsPanel(Modifier.padding(top = 12.dp)) {
-        Text(
-            text = stringResource(R.string.project_status, project.status),
-            color = colorResource(R.color.dashboard_text_secondary),
-            fontSize = 13.sp
-        )
-        project.managerName?.let { managerName ->
+private fun ProjectDetailHero(project: Project) {
+    val projectName = project.nameText ?: stringResource(project.nameResId)
+    val projectDescription = project.descriptionText ?: stringResource(project.descriptionResId)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 12.dp)
+            .padding(18.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(colorResource(project.badgeColorResId)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = project.initials,
+                    color = colorResource(project.accentColorResId),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 14.dp)
+            ) {
+                Text(
+                    text = projectName,
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                ProjectStatusChip(
+                    status = project.status,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+        if (projectDescription.isNotBlank()) {
             Text(
-                text = stringResource(R.string.project_manager_label, managerName),
-                modifier = Modifier.padding(top = 4.dp),
+                text = projectDescription,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
                 color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 13.sp
+                fontSize = 15.sp,
+                lineHeight = 21.sp
             )
         }
-        if (!project.startDate.isNullOrBlank() && !project.estimatedEndDate.isNullOrBlank()) {
-            Text(
-                text = stringResource(R.string.project_dates, project.startDate, project.estimatedEndDate),
-                modifier = Modifier.padding(top = 4.dp),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 13.sp
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            project.managerName?.let { managerName ->
+                ProjectMetaChip(
+                    label = stringResource(R.string.project_manager_label, managerName),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            if (!project.startDate.isNullOrBlank() && !project.estimatedEndDate.isNullOrBlank()) {
+                ProjectMetaChip(
+                    label = stringResource(R.string.project_dates, project.startDate, project.estimatedEndDate),
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
         project.actualEndDate?.takeIf { it.isNotBlank() }?.let { actualEnd ->
-            Text(
-                text = stringResource(R.string.project_actual_end, actualEnd),
-                modifier = Modifier.padding(top = 4.dp),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 13.sp
+            ProjectMetaChip(
+                label = stringResource(R.string.project_actual_end, actualEnd),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
             )
         }
+        if (project.members.isNotEmpty()) {
+            AvatarStack(
+                members = project.members,
+                avatarSize = 34.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .padding(top = 16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProjectStatusChip(status: String, modifier: Modifier = Modifier) {
+    val normalized = status.lowercase(Locale.getDefault())
+    val background = when (normalized) {
+        "completed", "done" -> R.color.project_green_soft
+        "blocked", "cancelled" -> R.color.task_red_soft
+        "in_progress", "active" -> R.color.task_blue_soft
+        else -> R.color.task_status_gray_bg
+    }
+    val textColor = when (normalized) {
+        "completed", "done" -> R.color.project_green
+        "blocked", "cancelled" -> R.color.task_red
+        "in_progress", "active" -> R.color.bottom_nav_selected
+        else -> R.color.task_status_gray_text
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(colorResource(background))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = status.replace('_', ' ').replaceFirstChar { it.uppercase() },
+            color = colorResource(textColor),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun ProjectMetaChip(label: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(colorResource(R.color.dashboard_muted))
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+    ) {
+        Text(
+            text = label,
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 12.sp,
+            lineHeight = 16.sp
+        )
+    }
+}
+
+@Composable
+private fun BackLink(text: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_arrow_right),
+            contentDescription = null,
+            modifier = Modifier
+                .size(18.dp)
+                .rotate(180f),
+            colorFilter = ColorFilter.tint(colorResource(R.color.bottom_nav_selected))
+        )
+        Text(
+            text = text,
+            modifier = Modifier.padding(start = 6.dp),
+            color = colorResource(R.color.bottom_nav_selected),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -782,97 +924,101 @@ fun CreateProjectScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
+                .screenContentPadding(bottom = 24.dp)
         ) {
-            Text(
-                text = stringResource(R.string.create_project_title),
-                modifier = Modifier.fillMaxWidth(),
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+            ScreenHeader(
+                title = stringResource(R.string.create_project_title),
+                subtitle = stringResource(R.string.create_project_subtitle)
             )
 
-            CreateTaskLabel(R.string.create_project_name)
-            CreateTaskInput(
-                value = name,
-                onValueChange = {
-                    name = it
-                    requiredError = false
-                },
-                singleLine = true,
-                keyboardType = KeyboardType.Text
-            )
-            CreateTaskLabel(R.string.create_project_description)
-            CreateTaskInput(
-                value = description,
-                onValueChange = { description = it },
-                minHeight = 92.dp,
-                singleLine = false
-            )
-            CreateTaskLabel(R.string.create_project_manager)
-            if (managerOptions.isEmpty()) {
-                Text(
-                    text = if (usersLoaded) {
-                        stringResource(R.string.create_project_no_users)
-                    } else {
-                        ""
+            FormSection(R.string.create_project_section_details) {
+                CreateTaskLabelNoTop(R.string.create_project_name)
+                CreateTaskInput(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        requiredError = false
                     },
-                    modifier = Modifier.padding(top = 6.dp),
-                    color = colorResource(R.color.dashboard_text_secondary),
-                    fontSize = 13.sp
+                    singleLine = true,
+                    keyboardType = KeyboardType.Text
                 )
-            } else {
-                SelectInput(
-                    selected = managerLabel.ifBlank { managerOptions.first() },
-                    values = managerOptions,
-                    onSelected = { managerLabel = it }
+                CreateTaskLabel(R.string.create_project_description)
+                CreateTaskInput(
+                    value = description,
+                    onValueChange = { description = it },
+                    minHeight = 92.dp,
+                    singleLine = false
                 )
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Column(Modifier.weight(1f)) {
-                    CreateTaskLabelNoTop(R.string.create_project_start_date)
-                    PickerInput(
-                        value = startDate,
-                        hint = stringResource(R.string.create_task_date_hint),
-                        iconResId = R.drawable.ic_calendar_clock,
-                        onClick = { showDatePicker(context) { startDate = it } }
+            FormSection(R.string.create_project_section_leadership) {
+                CreateTaskLabelNoTop(R.string.create_project_manager)
+                if (managerOptions.isEmpty()) {
+                    Text(
+                        text = if (usersLoaded) {
+                            stringResource(R.string.create_project_no_users)
+                        } else {
+                            ""
+                        },
+                        modifier = Modifier.padding(top = 6.dp),
+                        color = colorResource(R.color.dashboard_text_secondary),
+                        fontSize = 13.sp
                     )
-                }
-                Column(Modifier.weight(1f)) {
-                    CreateTaskLabelNoTop(R.string.create_project_estimated_end_date)
-                    PickerInput(
-                        value = estimatedEndDate,
-                        hint = stringResource(R.string.create_task_date_hint),
-                        iconResId = R.drawable.ic_calendar_clock,
-                        onClick = { showDatePicker(context) { estimatedEndDate = it } }
+                } else {
+                    SelectInput(
+                        selected = managerLabel.ifBlank { managerOptions.first() },
+                        values = managerOptions,
+                        onSelected = { managerLabel = it }
                     )
                 }
             }
+
+            FormSection(R.string.create_project_section_schedule) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.create_project_start_date)
+                        PickerInput(
+                            value = startDate,
+                            hint = stringResource(R.string.create_task_date_hint),
+                            iconResId = R.drawable.ic_calendar_clock,
+                            onClick = { showDatePicker(context) { startDate = it } }
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        CreateTaskLabelNoTop(R.string.create_project_estimated_end_date)
+                        PickerInput(
+                            value = estimatedEndDate,
+                            hint = stringResource(R.string.create_task_date_hint),
+                            iconResId = R.drawable.ic_calendar_clock,
+                            onClick = { showDatePicker(context) { estimatedEndDate = it } }
+                        )
+                    }
+                }
+            }
+
             if (users.isNotEmpty()) {
-                CreateTaskLabel(R.string.create_project_members)
-                users.forEach { user ->
-                    val selected = memberIds.contains(user.userId)
-                    SelectableMemberRow(
-                        user = user,
-                        selected = selected,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .padding(top = 8.dp),
-                        onClick = {
-                            memberIds = if (selected) {
-                                memberIds - user.userId
-                            } else {
-                                memberIds + user.userId
+                FormSection(R.string.create_project_members) {
+                    users.forEach { user ->
+                        val selected = memberIds.contains(user.userId)
+                        SelectableMemberRow(
+                            user = user,
+                            selected = selected,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .padding(top = 8.dp),
+                            onClick = {
+                                memberIds = if (selected) {
+                                    memberIds - user.userId
+                                } else {
+                                    memberIds + user.userId
+                                }
                             }
-                        }
-                    )
+                        )
+                    }
                 }
             }
 
@@ -888,11 +1034,11 @@ fun CreateProjectScreen() {
             FilledActionButton(
                 text = stringResource(R.string.create_project_save),
                 colorResId = R.color.login_button,
-                radius = 6.dp,
+                radius = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 24.dp)
-                    .height(48.dp),
+                    .height(50.dp),
                 onClick = {
                     if (isSaving) {
                         return@FilledActionButton
@@ -1018,78 +1164,74 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
+                .screenContentPadding(bottom = 24.dp)
         ) {
-            Text(
-                text = stringResource(R.string.create_task_title),
-                modifier = Modifier.fillMaxWidth(),
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
+            ScreenHeader(
+                title = stringResource(R.string.create_task_title),
+                subtitle = stringResource(R.string.create_task_subtitle, resolvedProjectName)
             )
-            Text(
-                text = stringResource(R.string.create_task_project) + ": " + resolvedProjectName,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 15.sp
-            )
-            CreateTaskLabel(R.string.create_task_task_title)
-            CreateTaskInput(
-                value = title,
-                onValueChange = {
-                    title = it
-                    requiredError = false
-                },
-                singleLine = true,
-                keyboardType = KeyboardType.Text
-            )
-            CreateTaskLabel(R.string.create_task_user)
-            if (assignees.isEmpty()) {
-                Text(
-                    text = if (assigneesLoaded) {
-                        stringResource(R.string.create_task_members_error)
-                    } else {
-                        ""
-                    },
-                    modifier = Modifier.padding(top = 6.dp),
-                    color = colorResource(R.color.dashboard_text_secondary),
-                    fontSize = 13.sp
-                )
-            } else {
-                SelectInput(
-                    selected = assigneeLabel.ifBlank { assignees.first().label() },
-                    values = assignees.map { it.label() },
-                    onSelected = {
-                        assigneeLabel = it
+
+            FormSection(R.string.create_task_section_details) {
+                CreateTaskLabelNoTop(R.string.create_task_task_title)
+                CreateTaskInput(
+                    value = title,
+                    onValueChange = {
+                        title = it
                         requiredError = false
-                    }
+                    },
+                    singleLine = true,
+                    keyboardType = KeyboardType.Text
+                )
+                CreateTaskLabel(R.string.create_task_user)
+                if (assignees.isEmpty()) {
+                    Text(
+                        text = if (assigneesLoaded) {
+                            stringResource(R.string.create_task_members_error)
+                        } else {
+                            ""
+                        },
+                        modifier = Modifier.padding(top = 6.dp),
+                        color = colorResource(R.color.dashboard_text_secondary),
+                        fontSize = 13.sp
+                    )
+                } else {
+                    SelectInput(
+                        selected = assigneeLabel.ifBlank { assignees.first().label() },
+                        values = assignees.map { it.label() },
+                        onSelected = {
+                            assigneeLabel = it
+                            requiredError = false
+                        }
+                    )
+                }
+                CreateTaskLabel(R.string.create_task_description)
+                CreateTaskInput(
+                    value = description,
+                    onValueChange = { description = it },
+                    minHeight = 92.dp,
+                    singleLine = false
                 )
             }
-            CreateTaskLabel(R.string.create_task_description)
-            CreateTaskInput(
-                value = description,
-                onValueChange = { description = it },
-                minHeight = 92.dp,
-                singleLine = false
-            )
-            CreateTaskLabel(R.string.create_task_estimated_end_date)
-            PickerInput(
-                value = estimatedEndDate,
-                hint = stringResource(R.string.create_task_date_hint),
-                iconResId = R.drawable.ic_calendar_clock,
-                onClick = { showDatePicker(context) { estimatedEndDate = it } }
-            )
-            CreateTaskLabel(R.string.create_task_estimated_time)
-            CreateTaskInput(
-                value = estimatedTime,
-                onValueChange = { estimatedTime = it },
-                singleLine = true,
-                keyboardType = KeyboardType.Number
-            )
-            CreateTaskLabel(R.string.create_task_location)
-            CreateTaskInput(value = location, onValueChange = { location = it }, singleLine = true)
+
+            FormSection(R.string.create_task_section_schedule) {
+                CreateTaskLabelNoTop(R.string.create_task_estimated_end_date)
+                PickerInput(
+                    value = estimatedEndDate,
+                    hint = stringResource(R.string.create_task_date_hint),
+                    iconResId = R.drawable.ic_calendar_clock,
+                    onClick = { showDatePicker(context) { estimatedEndDate = it } }
+                )
+                CreateTaskLabel(R.string.create_task_estimated_time)
+                CreateTaskInput(
+                    value = estimatedTime,
+                    onValueChange = { estimatedTime = it },
+                    singleLine = true,
+                    keyboardType = KeyboardType.Number
+                )
+                CreateTaskLabel(R.string.create_task_location)
+                CreateTaskInput(value = location, onValueChange = { location = it }, singleLine = true)
+            }
+
             if (requiredError) {
                 Text(
                     text = stringResource(R.string.create_task_required_error),
@@ -1101,11 +1243,11 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
             FilledActionButton(
                 text = stringResource(R.string.create_task_save),
                 colorResId = R.color.login_button,
-                radius = 6.dp,
+                radius = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 24.dp)
-                    .height(48.dp),
+                    .height(50.dp),
                 onClick = {
                     if (isSaving) {
                         return@FilledActionButton
@@ -1272,7 +1414,7 @@ fun TaskDetailScreen(taskId: Int) {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
+                .screenContentPadding(bottom = 24.dp)
         ) {
             Text(
                 text = task?.title ?: stringResource(R.string.task_detail_title),
@@ -1571,7 +1713,7 @@ fun AdminScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
+                .screenContentPadding(bottom = 24.dp)
         ) {
             Text(
                 text = stringResource(R.string.admin_title),
@@ -1696,20 +1838,6 @@ fun AdminScreen() {
                             }
                         )
                     }
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.admin_active),
-                        modifier = Modifier.weight(1f),
-                        color = colorResource(R.color.dashboard_text_primary),
-                        fontSize = 14.sp
-                    )
-                    Switch(checked = active, onCheckedChange = { active = it })
                 }
                 if (requiredError) {
                     Text(
@@ -1862,7 +1990,7 @@ fun SettingsScreen() {
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 18.dp, top = 20.dp, end = 18.dp, bottom = 24.dp)
+                .screenContentPadding(bottom = 24.dp)
         ) {
             Text(
                 text = stringResource(R.string.settings_title),
@@ -2008,7 +2136,11 @@ private fun AppScaffold(
             .fillMaxSize()
             .background(colorResource(R.color.dashboard_background))
     ) {
-        Box(modifier = Modifier.weight(1f)) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .statusBarsPadding()
+        ) {
             content()
         }
         BottomNavigation(selectedDestination)
@@ -2021,6 +2153,7 @@ private fun BottomNavigation(selectedDestination: Destination) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .height(72.dp)
             .background(colorResource(R.color.bottom_nav_border))
             .padding(top = 1.dp)
@@ -2796,16 +2929,40 @@ private fun StatusBadge(task: DashboardTask, height: Dp, minWidth: Dp, modifier:
 }
 
 @Composable
-private fun SectionTitle(@StringRes titleResId: Int, topPadding: Dp) {
-    Text(
-        text = stringResource(titleResId),
+private fun SectionTitle(
+    @StringRes titleResId: Int,
+    topPadding: Dp,
+    trailing: String? = null
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = topPadding, bottom = 10.dp),
-        color = colorResource(R.color.dashboard_text_primary),
-        fontSize = 18.sp,
-        fontWeight = FontWeight.Bold
-    )
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(titleResId),
+            modifier = Modifier.weight(1f),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (!trailing.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(colorResource(R.color.dashboard_muted))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = trailing,
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -3007,6 +3164,55 @@ private fun IconButtonLike(
             modifier = Modifier.size(24.dp),
             colorFilter = if (tint == Color.Unspecified) null else ColorFilter.tint(tint)
         )
+    }
+}
+
+@Composable
+private fun Modifier.screenContentPadding(bottom: Dp = 20.dp): Modifier {
+    return padding(start = 18.dp, top = 12.dp, end = 18.dp, bottom = bottom)
+}
+
+@Composable
+private fun ScreenHeader(
+    title: String,
+    subtitle: String? = null
+) {
+    Text(
+        text = title,
+        modifier = Modifier.fillMaxWidth(),
+        color = colorResource(R.color.dashboard_text_primary),
+        fontSize = 24.sp,
+        fontWeight = FontWeight.Bold
+    )
+    if (!subtitle.isNullOrBlank()) {
+        Text(
+            text = subtitle,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 15.sp,
+            lineHeight = 20.sp
+        )
+    }
+}
+
+@Composable
+private fun FormSection(
+    @StringRes titleResId: Int,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(modifier = modifier.fillMaxWidth().padding(top = 18.dp)) {
+        Text(
+            text = stringResource(titleResId).uppercase(Locale.getDefault()),
+            modifier = Modifier.fillMaxWidth(),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.8.sp
+        )
+        SettingsPanel(Modifier.padding(top = 8.dp), content = content)
     }
 }
 

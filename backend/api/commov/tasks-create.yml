@@ -1,0 +1,26 @@
+info:
+  name: tasks-create
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{baseUrl}}/tasks"
+  auth:
+    type: bearer
+    token: "{{token}}"
+  body:
+    type: json
+    data: |-
+      {
+        "projectId": 1,
+        "userId": 1,
+        "title": "Demo task",
+        "description": "Created from Bruno",
+        "estimatedEndDate": "2026-12-31",
+        "estimatedTime": 4,
+        "location": "Lisbon"
+      }
+
+settings:
+  encodeUrl: true

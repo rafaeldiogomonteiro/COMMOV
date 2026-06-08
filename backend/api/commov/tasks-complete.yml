@@ -1,0 +1,22 @@
+info:
+  name: tasks-complete
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: "{{baseUrl}}/tasks/1/complete"
+  auth:
+    type: bearer
+    token: "{{token}}"
+  body:
+    type: json
+    data: |-
+      {
+        "timeSpent": 4,
+        "location": "Lisbon",
+        "observation": "Completed from Bruno"
+      }
+
+settings:
+  encodeUrl: true

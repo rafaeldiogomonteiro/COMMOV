@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"commov/backend/internal/entity"
 	"commov/backend/internal/postgres"
@@ -15,10 +16,18 @@ import (
 	"gorm.io/gorm"
 )
 
+const defaultTokenTTL = 7 * 24 * time.Hour
+
+type authSession struct {
+	userID    int
+	expiresAt time.Time
+}
+
 type AuthService struct {
 	UserRepo *postgres.UserRepo
-	tokens   map[string]int
+	tokens   map[string]authSession
 	mu       sync.RWMutex
+	tokenTTL time.Duration
 }
 
 func (s *AuthService) Login(ctx context.Context, email string, password string) (string, *entity.User, error) {
@@ -48,17 +57,39 @@ func (s *AuthService) Login(ctx context.Context, email string, password string) 
 
 	s.mu.Lock()
 	if s.tokens == nil {
-		s.tokens = make(map[string]int)
+		s.tokens = make(map[string]authSession)
 	}
-	s.tokens[token] = user.UserID
+	s.tokens[token] = authSession{
+		userID:    user.UserID,
+		expiresAt: time.Now().UTC().Add(s.tokenTTLDuration()),
+	}
 	s.mu.Unlock()
 
 	return token, user, nil
 }
 
 func (s *AuthService) Logout(token string) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return
+	}
+
 	s.mu.Lock()
 	delete(s.tokens, token)
+	s.mu.Unlock()
+}
+
+func (s *AuthService) RevokeUserTokens(userID int) {
+	if userID <= 0 {
+		return
+	}
+
+	s.mu.Lock()
+	for token, session := range s.tokens {
+		if session.userID == userID {
+			delete(s.tokens, token)
+		}
+	}
 	s.mu.Unlock()
 }
 
@@ -68,10 +99,8 @@ func (s *AuthService) CheckLogin(ctx context.Context, token string) (*entity.Use
 		return nil, false, nil
 	}
 
-	s.mu.RLock()
-	userID := s.tokens[token]
-	s.mu.RUnlock()
-	if userID == 0 {
+	userID, ok := s.lookupToken(token)
+	if !ok {
 		return nil, false, nil
 	}
 
@@ -89,6 +118,31 @@ func (s *AuthService) CheckLogin(ctx context.Context, token string) (*entity.Use
 	}
 
 	return user, true, nil
+}
+
+func (s *AuthService) lookupToken(token string) (int, bool) {
+	now := time.Now().UTC()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	session, exists := s.tokens[token]
+	if !exists {
+		return 0, false
+	}
+	if !session.expiresAt.After(now) {
+		delete(s.tokens, token)
+		return 0, false
+	}
+
+	return session.userID, true
+}
+
+func (s *AuthService) tokenTTLDuration() time.Duration {
+	if s.tokenTTL > 0 {
+		return s.tokenTTL
+	}
+	return defaultTokenTTL
 }
 
 func newToken() (string, error) {

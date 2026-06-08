@@ -25,7 +25,7 @@ class DashboardViewModel(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var observer: StateObserver? = null
-    private var state = emptyState(userName = sessionManager.currentUser()?.name?.firstName().orEmpty())
+    private var state = emptyState(userName = sessionManager.currentUser()?.name?.trim().orEmpty())
 
     fun observe(observer: StateObserver) {
         this.observer = observer
@@ -48,7 +48,7 @@ class DashboardViewModel(
                     is CheckLoginResult.LoggedIn -> {
                         sessionManager.saveSession(token, result.user)
                         state = state.copy(
-                            userName = result.user.name.firstName(),
+                            userName = result.user.name.trim(),
                             requiresLogin = false
                         )
                         publish(state)
@@ -116,10 +116,6 @@ class DashboardViewModel(
             tasks = emptyList(),
             requiresLogin = false
         )
-    }
-
-    private fun String.firstName(): String {
-        return trim().substringBefore(" ").ifBlank { this }
     }
 
     private fun List<ApiTask>.percent(predicate: (ApiTask) -> Boolean): Int {

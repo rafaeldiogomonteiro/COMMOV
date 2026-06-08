@@ -49,3 +49,13 @@ func (r *ProjectRepo) Update(ctx context.Context, project *entity.Project) error
 func (r *ProjectRepo) Delete(ctx context.Context, projectID int) error {
 	return r.DB.WithContext(ctx).Delete(&entity.Project{}, "project_id = ?", projectID).Error
 }
+
+func (r *ProjectRepo) CountUserReferences(ctx context.Context, userID int) (int64, error) {
+	var count int64
+	err := r.DB.WithContext(ctx).
+		Model(&entity.Project{}).
+		Where("manager_id = ? OR created_by = ?", userID, userID).
+		Count(&count).Error
+
+	return count, err
+}

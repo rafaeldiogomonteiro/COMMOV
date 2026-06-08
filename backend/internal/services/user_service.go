@@ -21,7 +21,9 @@ var (
 )
 
 type UserService struct {
-	UserRepo *postgres.UserRepo
+	UserRepo    *postgres.UserRepo
+	ProjectRepo *postgres.ProjectRepo
+	AuthService *AuthService
 }
 
 func (s *UserService) EnsureDefaultUser(ctx context.Context, defaultUser string, password string) (*entity.User, bool, error) {
@@ -118,14 +120,8 @@ func (s *UserService) Create(
 	photo = strings.TrimSpace(photo)
 	role := entity.UserRole(strings.TrimSpace(roleValue))
 
-	if name == "" {
-		return nil, validationError("name is required")
-	}
-	if username == "" {
-		return nil, validationError("username is required")
-	}
-	if email == "" {
-		return nil, validationError("email is required")
+	if err := validateUserIdentity(name, username, email); err != nil {
+		return nil, err
 	}
 	if password == "" {
 		return nil, validationError("password is required")
@@ -239,10 +235,16 @@ func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, i
 		return nil, fmt.Errorf("get user: %w", err)
 	}
 
+	passwordChanged := false
+	deactivated := false
+
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
 		if name == "" {
 			return nil, validationError("name is required")
+		}
+		if len(name) > 120 {
+			return nil, validationError("name must be 120 characters or fewer")
 		}
 		user.Name = name
 	}
@@ -250,6 +252,9 @@ func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, i
 		username := strings.TrimSpace(*input.Username)
 		if username == "" {
 			return nil, validationError("username is required")
+		}
+		if len(username) > 80 {
+			return nil, validationError("username must be 80 characters or fewer")
 		}
 		exists, err := s.UserRepo.ExistsByUsername(ctx, username)
 		if err != nil {
@@ -264,6 +269,9 @@ func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, i
 		email := strings.ToLower(strings.TrimSpace(*input.Email))
 		if email == "" {
 			return nil, validationError("email is required")
+		}
+		if len(email) > 160 {
+			return nil, validationError("email must be 160 characters or fewer")
 		}
 		exists, err := s.UserRepo.ExistsByEmail(ctx, email)
 		if err != nil {
@@ -284,6 +292,7 @@ func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, i
 			return nil, fmt.Errorf("hash password: %w", err)
 		}
 		user.Password = string(passwordHash)
+		passwordChanged = true
 	}
 	if input.Photo != nil {
 		user.Photo = strings.TrimSpace(*input.Photo)
@@ -296,11 +305,18 @@ func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, i
 		user.Role = role
 	}
 	if input.Active != nil {
+		if user.Active && !*input.Active {
+			deactivated = true
+		}
 		user.Active = *input.Active
 	}
 
 	if err := s.UserRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("update user: %w", err)
+	}
+
+	if s.AuthService != nil && (passwordChanged || deactivated) {
+		s.AuthService.RevokeUserTokens(user.UserID)
 	}
 
 	return user, nil
@@ -313,9 +329,67 @@ func (s *UserService) Delete(ctx context.Context, actorUserID int, userID int) e
 	if userID <= 0 {
 		return validationError("userId is invalid")
 	}
+	if actorUserID == userID {
+		return validationError("cannot delete your own user")
+	}
+
+	user, err := s.UserRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return notFoundError("user not found")
+		}
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	if user.Role == entity.UserRoleAdmin && user.Active {
+		remainingAdmins, err := s.UserRepo.CountActiveAdmins(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("count active admins: %w", err)
+		}
+		if remainingAdmins == 0 {
+			return validationError("cannot delete the last active admin")
+		}
+	}
+
+	if s.ProjectRepo != nil {
+		references, err := s.ProjectRepo.CountUserReferences(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("count project references: %w", err)
+		}
+		if references > 0 {
+			return validationError("user is referenced by one or more projects")
+		}
+	}
 
 	if err := s.UserRepo.Delete(ctx, userID); err != nil {
 		return fmt.Errorf("delete user: %w", err)
+	}
+
+	if s.AuthService != nil {
+		s.AuthService.RevokeUserTokens(userID)
+	}
+
+	return nil
+}
+
+func validateUserIdentity(name string, username string, email string) error {
+	if name == "" {
+		return validationError("name is required")
+	}
+	if len(name) > 120 {
+		return validationError("name must be 120 characters or fewer")
+	}
+	if username == "" {
+		return validationError("username is required")
+	}
+	if len(username) > 80 {
+		return validationError("username must be 80 characters or fewer")
+	}
+	if email == "" {
+		return validationError("email is required")
+	}
+	if len(email) > 160 {
+		return validationError("email must be 160 characters or fewer")
 	}
 
 	return nil

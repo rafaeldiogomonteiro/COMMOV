@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	defaultTaskStatus   = "pending"
-	completedTaskStatus = "completed"
+	defaultTaskStatus   = entity.TaskStatusPending
+	completedTaskStatus = entity.TaskStatusCompleted
 )
 
 type TaskCreateInput struct {
@@ -227,13 +227,11 @@ func (s *TaskService) Update(ctx context.Context, actorUserID int, taskID int, i
 	if input.Description != nil {
 		task.Description = strings.TrimSpace(*input.Description)
 	}
+	previousStatus := task.Status
 	if input.Status != nil {
-		status := strings.TrimSpace(*input.Status)
-		if status == "" {
-			return nil, validationError("status is required")
-		}
-		if len(status) > 50 {
-			return nil, validationError("status must be 50 characters or fewer")
+		status, ok := entity.NormalizeTaskStatus(*input.Status)
+		if !ok {
+			return nil, validationError("invalid task status")
 		}
 		task.Status = status
 	}
@@ -277,11 +275,16 @@ func (s *TaskService) Update(ctx context.Context, actorUserID int, taskID int, i
 	if input.Photo != nil {
 		task.Photo = strings.TrimSpace(*input.Photo)
 	}
-	if strings.EqualFold(task.Status, completedTaskStatus) {
+	if entity.IsCompletedStatus(task.Status) {
 		task.CompletionRate = 100
 		if task.ActualEndDate == nil {
 			today := currentDate()
 			task.ActualEndDate = &today
+		}
+	} else if entity.IsCompletedStatus(previousStatus) {
+		task.ActualEndDate = nil
+		if task.CompletionRate >= 100 {
+			task.CompletionRate = 0
 		}
 	}
 
@@ -330,6 +333,9 @@ func (s *TaskService) AddTimeSpent(ctx context.Context, actorUserID int, taskID 
 	}
 	if !hasManagementRole(actor) && task.UserID != actor.UserID {
 		return nil, fmt.Errorf("%w: task is not assigned to this user", ErrForbidden)
+	}
+	if entity.IsCompletedStatus(task.Status) {
+		return nil, validationError("completed tasks cannot receive additional time")
 	}
 	if input.TimeSpent <= 0 {
 		return nil, validationError("timeSpent must be greater than 0")
@@ -512,12 +518,11 @@ func normalizeTaskText(
 	if len(title) > 160 {
 		return "", "", "", "", "", "", validationError("title must be 160 characters or fewer")
 	}
-	if status == "" {
-		status = defaultTaskStatus
+	normalizedStatus, ok := entity.NormalizeTaskStatus(status)
+	if !ok {
+		return "", "", "", "", "", "", validationError("invalid task status")
 	}
-	if len(status) > 50 {
-		return "", "", "", "", "", "", validationError("status must be 50 characters or fewer")
-	}
+	status = normalizedStatus
 	if len(location) > 160 {
 		return "", "", "", "", "", "", validationError("location must be 160 characters or fewer")
 	}
@@ -566,8 +571,8 @@ func validateTaskDates(project *entity.Project, estimatedEndDate *time.Time, act
 }
 
 func currentDate() time.Time {
-	now := time.Now()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	now := time.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func dateOnly(value time.Time) time.Time {

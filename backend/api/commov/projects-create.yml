@@ -1,0 +1,25 @@
+info:
+  name: projects-create
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects"
+  auth:
+    type: bearer
+    token: "{{token}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Demo project",
+        "description": "Created from Bruno",
+        "managerId": 1,
+        "startDate": "2026-06-01",
+        "estimatedEndDate": "2026-12-31",
+        "memberIds": []
+      }
+
+settings:
+  encodeUrl: true

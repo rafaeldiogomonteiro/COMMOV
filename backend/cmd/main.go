@@ -28,7 +28,11 @@ func main() {
 	projectUserRepo := &postgres.ProjectUserRepo{DB: db}
 	taskRepo := &postgres.TaskRepo{DB: db}
 	authService := &services.AuthService{UserRepo: userRepo}
-	userService := &services.UserService{UserRepo: userRepo}
+	userService := &services.UserService{
+		UserRepo:    userRepo,
+		ProjectRepo: projectRepo,
+		AuthService: authService,
+	}
 	projectService := &services.ProjectService{
 		ProjectRepo:     projectRepo,
 		ProjectUserRepo: projectUserRepo,

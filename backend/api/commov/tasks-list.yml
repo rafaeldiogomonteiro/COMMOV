@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: http://localhost:8080/tasks
+  url: "{{baseUrl}}/tasks"
   auth:
     type: bearer
     token: "{{token}}"
