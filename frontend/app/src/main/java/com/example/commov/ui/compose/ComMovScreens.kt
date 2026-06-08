@@ -14,11 +14,16 @@ import android.widget.Toast
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -42,11 +47,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,6 +80,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.commov.MainActivity
 import com.example.commov.R
 import com.example.commov.data.local.SessionManager
@@ -426,8 +432,16 @@ fun ProjectsScreen() {
     var editDescription by remember { mutableStateOf("") }
     var editStatus by remember { mutableStateOf("active") }
     var showAddMember by remember { mutableStateOf(false) }
+    var showDeleteProjectConfirm by remember { mutableStateOf(false) }
     var pickerUsers by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
     val project = state.projects.firstOrNull { it.projectId == selectedProjectId }
+    val projectDetailRefreshLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            viewModel.reload()
+        }
+    }
 
     fun runProjectMutation(
         mutation: (String) -> ProjectMutationResult,
@@ -547,13 +561,7 @@ fun ProjectsScreen() {
                             editStatus = project.status
                             showEditProject = true
                         },
-                        onDelete = {
-                            runProjectMutation(
-                                mutation = { token -> projectsApi.deleteProject(token, project.projectId) },
-                                successMessageResId = R.string.project_deleted,
-                                onSuccess = { selectedProjectId = null }
-                            )
-                        },
+                        onDelete = { showDeleteProjectConfirm = true },
                         onCreateTask = {
                             val intent = Intent(context, CreateTaskActivity::class.java)
                             intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_ID, project.projectId)
@@ -561,12 +569,12 @@ fun ProjectsScreen() {
                                 CreateTaskActivity.EXTRA_PROJECT_NAME,
                                 project.nameText ?: context.getString(project.nameResId)
                             )
-                            context.startActivity(intent)
+                            projectDetailRefreshLauncher.launch(intent)
                         },
                         onTaskClick = { taskId ->
                             val intent = Intent(context, TaskDetailActivity::class.java)
                             intent.putExtra(TaskDetailActivity.EXTRA_TASK_ID, taskId)
-                            context.startActivity(intent)
+                            projectDetailRefreshLauncher.launch(intent)
                         },
                         onRemoveMember = { member ->
                             runProjectMutation(
@@ -607,6 +615,23 @@ fun ProjectsScreen() {
         }
     }
 
+    if (showDeleteProjectConfirm && project != null) {
+        ConfirmActionDialog(
+            title = stringResource(R.string.confirm_delete_title),
+            message = stringResource(R.string.confirm_delete_project_message),
+            confirmText = stringResource(R.string.project_delete),
+            onDismiss = { showDeleteProjectConfirm = false },
+            onConfirm = {
+                showDeleteProjectConfirm = false
+                runProjectMutation(
+                    mutation = { token -> projectsApi.deleteProject(token, project.projectId) },
+                    successMessageResId = R.string.project_deleted,
+                    onSuccess = { selectedProjectId = null }
+                )
+            }
+        )
+    }
+
     if (showAddMember && project != null) {
         UserPickerDialog(
             title = stringResource(R.string.project_add_member),
@@ -624,57 +649,32 @@ fun ProjectsScreen() {
     }
 
     if (showEditProject && project != null) {
-        val statusOptions = projectStatusLabels()
-        val statusValues = projectStatusValues()
-        AlertDialog(
-            onDismissRequest = { showEditProject = false },
-            title = { Text(stringResource(R.string.project_edit)) },
-            text = {
-                Column {
-                    CreateTaskLabelNoTop(R.string.create_project_name)
-                    CreateTaskInput(value = editName, onValueChange = { editName = it }, singleLine = true)
-                    CreateTaskLabel(R.string.create_project_description)
-                    CreateTaskInput(value = editDescription, onValueChange = { editDescription = it }, singleLine = false)
-                    CreateTaskLabel(R.string.create_task_status)
-                    SelectInput(
-                        selected = projectStatusLabel(editStatus),
-                        values = statusOptions,
-                        onSelected = { selected ->
-                            val index = statusOptions.indexOf(selected)
-                            if (index >= 0) {
-                                editStatus = statusValues[index]
-                            }
-                        }
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        runProjectMutation(
-                            mutation = { token ->
-                                projectsApi.updateProject(
-                                    token,
-                                    project.projectId,
-                                    UpdateProjectInput(
-                                        name = editName.trim(),
-                                        description = editDescription.trim(),
-                                        status = editStatus.trim()
-                                    )
-                                )
-                            },
-                            successMessageResId = R.string.project_updated,
-                            onSuccess = { showEditProject = false }
+        EditProjectDialog(
+            name = editName,
+            onNameChange = { editName = it },
+            description = editDescription,
+            onDescriptionChange = { editDescription = it },
+            status = editStatus,
+            statusOptions = projectStatusLabels(),
+            statusValues = projectStatusValues(),
+            onStatusChange = { editStatus = it },
+            onDismiss = { showEditProject = false },
+            onSave = {
+                runProjectMutation(
+                    mutation = { token ->
+                        projectsApi.updateProject(
+                            token,
+                            project.projectId,
+                            UpdateProjectInput(
+                                name = editName.trim(),
+                                description = editDescription.trim(),
+                                status = editStatus.trim()
+                            )
                         )
-                    }
-                ) {
-                    Text(stringResource(R.string.create_project_save))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEditProject = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
+                    },
+                    successMessageResId = R.string.project_updated,
+                    onSuccess = { showEditProject = false }
+                )
             }
         )
     }
@@ -1504,68 +1504,45 @@ private fun AddTimeSpentDialog(
     var observation by remember { mutableStateOf("") }
     var requiredError by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = stringResource(R.string.task_detail_add_time_spent),
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column {
-                Text(
-                    text = stringResource(R.string.task_detail_work_date) + ": " + currentDateString(),
-                    color = colorResource(R.color.dashboard_text_secondary),
-                    fontSize = 13.sp
-                )
-                CreateTaskLabel(R.string.task_detail_hours_to_add)
-                CreateTaskInput(
-                    value = hours,
-                    onValueChange = {
-                        hours = it
-                        requiredError = false
-                    },
-                    singleLine = true,
-                    keyboardType = KeyboardType.Decimal
-                )
-                CreateTaskLabel(R.string.task_detail_observation)
-                CreateTaskInput(
-                    value = observation,
-                    onValueChange = { observation = it },
-                    minHeight = 88.dp,
-                    singleLine = false
-                )
-                if (requiredError) {
-                    Text(
-                        text = stringResource(R.string.create_task_required_error),
-                        modifier = Modifier.padding(top = 8.dp),
-                        color = colorResource(R.color.login_error),
-                        fontSize = 12.sp
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val parsedHours = hours.toDoubleOrNull()
-                    if (parsedHours == null || parsedHours <= 0 || observation.trim().isEmpty()) {
-                        requiredError = true
-                        return@TextButton
-                    }
-                    onConfirm(parsedHours, observation.trim())
-                }
-            ) {
-                Text(stringResource(R.string.action_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.cancel))
+    AppFormDialog(
+        title = stringResource(R.string.task_detail_add_time_spent),
+        subtitle = stringResource(R.string.task_detail_work_date) + ": " + currentDateString(),
+        onDismiss = onDismiss,
+        confirmText = stringResource(R.string.action_save),
+        onConfirm = {
+            val parsedHours = hours.toDoubleOrNull()
+            if (parsedHours == null || parsedHours <= 0 || observation.trim().isEmpty()) {
+                requiredError = true
+            } else {
+                onConfirm(parsedHours, observation.trim())
             }
         }
-    )
+    ) {
+        CreateTaskLabelNoTop(R.string.task_detail_hours_to_add)
+        CreateTaskInput(
+            value = hours,
+            onValueChange = {
+                hours = it
+                requiredError = false
+            },
+            singleLine = true,
+            keyboardType = KeyboardType.Decimal
+        )
+        CreateTaskLabel(R.string.task_detail_observation)
+        CreateTaskInput(
+            value = observation,
+            onValueChange = { observation = it },
+            singleLine = false
+        )
+        if (requiredError) {
+            Text(
+                text = stringResource(R.string.create_task_required_error),
+                modifier = Modifier.padding(top = 8.dp),
+                color = colorResource(R.color.login_error),
+                fontSize = 12.sp
+            )
+        }
+    }
 }
 
 @Composable
@@ -1576,35 +1553,63 @@ private fun UserPickerDialog(
     onDismiss: () -> Unit,
     onUserSelected: (ApiUser) -> Unit
 ) {
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold) },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(colorResource(R.color.dashboard_card))
+                .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(18.dp))
+                .padding(20.dp)
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.project_select_member),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 14.sp,
+                lineHeight = 19.sp
+            )
+
             if (users.isEmpty()) {
-                Text(
-                    text = emptyMessage,
-                    color = colorResource(R.color.dashboard_text_secondary),
-                    fontSize = 14.sp
-                )
+                Box(Modifier.padding(top = 18.dp)) {
+                    EmptyStateCard(text = emptyMessage)
+                }
             } else {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState())
+                        .padding(top = 18.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     users.forEach { user ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
+                                .background(colorResource(R.color.dashboard_background))
+                                .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(12.dp))
                                 .clickable { onUserSelected(user) }
-                                .padding(horizontal = 4.dp, vertical = 10.dp),
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Avatar(
                                 member = user.toProjectMember(0, false),
-                                size = 38.dp
+                                size = 40.dp
                             )
                             Column(
                                 modifier = Modifier
@@ -1628,18 +1633,30 @@ private fun UserPickerDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
+                            Image(
+                                painter = painterResource(R.drawable.ic_arrow_right),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .rotate(180f),
+                                colorFilter = ColorFilter.tint(colorResource(R.color.dashboard_text_secondary))
+                            )
                         }
                     }
                 }
             }
-        },
-        confirmButton = {},
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.cancel))
-            }
+
+            OutlineActionButton(
+                text = stringResource(android.R.string.cancel),
+                colorResId = R.color.dashboard_text_secondary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp)
+                    .height(46.dp),
+                onClick = onDismiss
+            )
         }
-    )
+    }
 }
 
 @Composable
@@ -1719,7 +1736,6 @@ fun CreateProjectScreen() {
                 CreateTaskInput(
                     value = description,
                     onValueChange = { description = it },
-                    minHeight = 92.dp,
                     singleLine = false
                 )
             }
@@ -1977,7 +1993,6 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                 CreateTaskInput(
                     value = description,
                     onValueChange = { description = it },
-                    minHeight = 92.dp,
                     singleLine = false
                 )
             }
@@ -2060,6 +2075,7 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                             when (result) {
                                 CreateTaskResult.Success -> {
                                     Toast.makeText(context, R.string.create_task_saved, Toast.LENGTH_LONG).show()
+                                    activity.setResult(Activity.RESULT_OK)
                                     activity.finish()
                                 }
                                 CreateTaskResult.Unauthorized -> {
@@ -2094,6 +2110,8 @@ fun TaskDetailScreen(taskId: Int) {
     var projectManagerId by remember { mutableStateOf(0) }
     var showAddTimeDialog by remember { mutableStateOf(false) }
     var showAssigneePicker by remember { mutableStateOf(false) }
+    var showDeleteTaskConfirm by remember { mutableStateOf(false) }
+    var showCompleteTaskConfirm by remember { mutableStateOf(false) }
     var assigneePickerUsers by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
     var isSaving by remember { mutableStateOf(false) }
 
@@ -2163,6 +2181,56 @@ fun TaskDetailScreen(taskId: Int) {
 
     LaunchedEffect(taskId) {
         loadTask()
+    }
+
+    if (showCompleteTaskConfirm) {
+        ConfirmActionDialog(
+            title = stringResource(R.string.confirm_complete_title),
+            message = stringResource(R.string.confirm_complete_task_message),
+            confirmText = stringResource(R.string.task_detail_complete),
+            confirmColorResId = R.color.project_green,
+            onDismiss = { showCompleteTaskConfirm = false },
+            onConfirm = {
+                showCompleteTaskConfirm = false
+                if (!isSaving) {
+                    mutate(
+                        action = { token ->
+                            taskApi.complete(
+                                token,
+                                taskId,
+                                currentDateString(),
+                                task?.observation.orEmpty(),
+                                photo = task?.photo,
+                                location = task?.location
+                            )
+                        },
+                        successMessage = R.string.task_detail_updated
+                    )
+                }
+            }
+        )
+    }
+
+    if (showDeleteTaskConfirm) {
+        ConfirmActionDialog(
+            title = stringResource(R.string.confirm_delete_title),
+            message = stringResource(R.string.confirm_delete_task_message),
+            confirmText = stringResource(R.string.task_detail_delete),
+            onDismiss = { showDeleteTaskConfirm = false },
+            onConfirm = {
+                showDeleteTaskConfirm = false
+                if (!isSaving) {
+                    mutate(
+                        action = { token -> taskApi.delete(token, taskId) },
+                        successMessage = R.string.task_detail_deleted,
+                        afterSuccess = {
+                            activity.setResult(Activity.RESULT_OK)
+                            activity.finish()
+                        }
+                    )
+                }
+            }
+        )
     }
 
     if (showAddTimeDialog) {
@@ -2304,19 +2372,7 @@ fun TaskDetailScreen(taskId: Int) {
                         .height(50.dp),
                     onClick = {
                         if (isSaving) return@FilledActionButton
-                        mutate(
-                            action = { token ->
-                                taskApi.complete(
-                                    token,
-                                    taskId,
-                                    currentDateString(),
-                                    task?.observation.orEmpty(),
-                                    photo = task?.photo,
-                                    location = task?.location
-                                )
-                            },
-                            successMessage = R.string.task_detail_updated
-                        )
+                        showCompleteTaskConfirm = true
                     }
                 )
             }
@@ -2330,11 +2386,7 @@ fun TaskDetailScreen(taskId: Int) {
                         .height(46.dp),
                     onClick = {
                         if (isSaving) return@OutlineActionButton
-                        mutate(
-                            action = { token -> taskApi.delete(token, taskId) },
-                            successMessage = R.string.task_detail_deleted,
-                            afterSuccess = { activity.finish() }
-                        )
+                        showDeleteTaskConfirm = true
                     }
                 )
             }
@@ -2360,6 +2412,7 @@ fun AdminScreen() {
     var editingUserId by remember { mutableStateOf<Int?>(null) }
     var requiredError by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
+    var userToDelete by remember { mutableStateOf<ApiUser?>(null) }
 
     fun clearForm() {
         editingUserId = null
@@ -2708,20 +2761,31 @@ fun AdminScreen() {
                         .fillMaxWidth()
                         .padding(bottom = 10.dp)
                         .clickable { loadUserIntoForm(user) },
-                    onDelete = {
-                        mutate(
-                            mutation = { token -> adminApi.deleteUser(token, user.userId) },
-                            successMessageResId = R.string.admin_delete_success,
-                            onSuccess = {
-                                if (editingUserId == user.userId) {
-                                    clearForm()
-                                }
-                            }
-                        )
-                    }
+                    onDelete = { userToDelete = user }
                 )
             }
         }
+    }
+
+    userToDelete?.let { user ->
+        ConfirmActionDialog(
+            title = stringResource(R.string.confirm_delete_title),
+            message = stringResource(R.string.confirm_delete_user_message),
+            confirmText = stringResource(R.string.admin_delete_user),
+            onDismiss = { userToDelete = null },
+            onConfirm = {
+                userToDelete = null
+                mutate(
+                    mutation = { token -> adminApi.deleteUser(token, user.userId) },
+                    successMessageResId = R.string.admin_delete_success,
+                    onSuccess = {
+                        if (editingUserId == user.userId) {
+                            clearForm()
+                        }
+                    }
+                )
+            }
+        )
     }
 }
 
@@ -2932,7 +2996,7 @@ private fun BottomNavigation(selectedDestination: Destination) {
         if (SessionManager(context.applicationContext).isAdmin()) {
             BottomNavigationItem(
                 labelResId = R.string.nav_admin,
-                iconResId = R.drawable.ic_settings,
+                iconResId = R.drawable.ic_admin,
                 selected = selectedDestination == Destination.ADMIN,
                 modifier = Modifier.weight(1f),
                 onClick = { navigate(context, selectedDestination, Destination.ADMIN, AdminActivity::class.java) }
@@ -2992,7 +3056,7 @@ private fun LanguageSelector(
         "PT"
     }
     var expanded by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
+    BoxWithConstraints(modifier = modifier) {
         Row(
             modifier = Modifier
                 .height(32.dp)
@@ -3015,16 +3079,25 @@ private fun LanguageSelector(
                     .size(16.dp)
             )
         }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.language_english)) },
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(maxWidth),
+            shape = RoundedCornerShape(12.dp),
+            containerColor = colorResource(R.color.dashboard_card),
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, colorResource(R.color.dashboard_card_stroke))
+        ) {
+            AppDropdownMenuItem(
+                text = stringResource(R.string.language_english),
                 onClick = {
                     expanded = false
                     onLanguageSelected(LocaleHelper.LANGUAGE_ENGLISH)
                 }
             )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.language_portuguese)) },
+            AppDropdownMenuItem(
+                text = stringResource(R.string.language_portuguese),
                 onClick = {
                     expanded = false
                     onLanguageSelected(LocaleHelper.LANGUAGE_PORTUGUESE)
@@ -3776,15 +3849,16 @@ private fun CreateTaskInput(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    minHeight: Dp = 48.dp,
+    minHeight: Dp? = null,
     singleLine: Boolean = true,
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
+    val fieldHeight = minHeight ?: if (singleLine) 48.dp else 140.dp
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(minHeight)
+            .height(fieldHeight)
             .padding(top = 6.dp)
             .inputBackground()
             .padding(horizontal = 12.dp),
@@ -3797,10 +3871,268 @@ private fun CreateTaskInput(
                 .fillMaxWidth()
                 .padding(top = if (singleLine) 0.dp else 12.dp),
             singleLine = singleLine,
-            textStyle = TextStyle(color = colorResource(R.color.dashboard_text_primary), fontSize = 15.sp),
+            textStyle = TextStyle(
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 15.sp,
+                lineHeight = if (singleLine) 15.sp else 21.sp
+            ),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             visualTransformation = visualTransformation
         )
+    }
+}
+
+@Composable
+private fun ConfirmActionDialog(
+    title: String,
+    message: String,
+    confirmText: String,
+    @ColorRes confirmColorResId: Int = R.color.settings_logout,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(colorResource(R.color.dashboard_card))
+                .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(18.dp))
+                .padding(20.dp)
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = message,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 15.sp,
+                lineHeight = 22.sp
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlineActionButton(
+                    text = stringResource(android.R.string.cancel),
+                    colorResId = R.color.dashboard_text_secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onDismiss
+                )
+                FilledActionButton(
+                    text = confirmText,
+                    colorResId = confirmColorResId,
+                    radius = 12.dp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onConfirm
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditProjectDialog(
+    name: String,
+    onNameChange: (String) -> Unit,
+    description: String,
+    onDescriptionChange: (String) -> Unit,
+    status: String,
+    statusOptions: List<String>,
+    statusValues: List<String>,
+    onStatusChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(colorResource(R.color.dashboard_card))
+                .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(18.dp))
+                .padding(20.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.project_edit),
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.create_project_subtitle),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 14.sp,
+                lineHeight = 19.sp
+            )
+
+            Column(Modifier.padding(top = 18.dp)) {
+                CreateTaskLabelNoTop(R.string.create_project_name)
+                CreateTaskInput(
+                    value = name,
+                    onValueChange = onNameChange,
+                    singleLine = true
+                )
+                CreateTaskLabel(R.string.create_project_description)
+                CreateTaskInput(
+                    value = description,
+                    onValueChange = onDescriptionChange,
+                    singleLine = false
+                )
+                CreateTaskLabel(R.string.create_task_status)
+                SelectInput(
+                    selected = projectStatusLabel(status),
+                    values = statusOptions,
+                    onSelected = { selected ->
+                        val index = statusOptions.indexOf(selected)
+                        if (index >= 0) {
+                            onStatusChange(statusValues[index])
+                        }
+                    }
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlineActionButton(
+                    text = stringResource(android.R.string.cancel),
+                    colorResId = R.color.dashboard_text_secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onDismiss
+                )
+                FilledActionButton(
+                    text = stringResource(R.string.create_project_save),
+                    colorResId = R.color.login_button,
+                    radius = 12.dp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onSave
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppDropdownMenuItem(
+    text: String,
+    onClick: () -> Unit
+) {
+    DropdownMenuItem(
+        text = {
+            Text(
+                text = text,
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 15.sp
+            )
+        },
+        onClick = onClick,
+        colors = MenuDefaults.itemColors(
+            textColor = colorResource(R.color.dashboard_text_primary)
+        ),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+    )
+}
+
+@Composable
+private fun AppFormDialog(
+    title: String,
+    subtitle: String? = null,
+    onDismiss: () -> Unit,
+    confirmText: String,
+    onConfirm: () -> Unit,
+    @ColorRes confirmColorResId: Int = R.color.login_button,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(colorResource(R.color.dashboard_card))
+                .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(18.dp))
+                .padding(20.dp)
+        ) {
+            Text(
+                text = title,
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            if (!subtitle.isNullOrBlank()) {
+                Text(
+                    text = subtitle,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 14.sp,
+                    lineHeight = 19.sp
+                )
+            }
+            Column(Modifier.padding(top = 18.dp), content = content)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                OutlineActionButton(
+                    text = stringResource(android.R.string.cancel),
+                    colorResId = R.color.dashboard_text_secondary,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onDismiss
+                )
+                FilledActionButton(
+                    text = confirmText,
+                    colorResId = confirmColorResId,
+                    radius = 12.dp,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    onClick = onConfirm
+                )
+            }
+        }
     }
 }
 
@@ -3811,21 +4143,49 @@ private fun SelectInput(
     onSelected: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .height(54.dp)
             .padding(top = 6.dp)
-            .inputBackground()
-            .clickable { expanded = true }
-            .padding(horizontal = 10.dp),
-        contentAlignment = Alignment.CenterStart
     ) {
-        Text(text = selected, color = colorResource(R.color.dashboard_text_primary), fontSize = 15.sp)
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .inputBackground()
+                .clickable { expanded = true }
+                .padding(start = 12.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = selected,
+                modifier = Modifier.weight(1f),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Image(
+                painter = painterResource(R.drawable.ic_chevron_down),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                colorFilter = ColorFilter.tint(colorResource(R.color.dashboard_text_secondary))
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(maxWidth),
+            shape = RoundedCornerShape(12.dp),
+            containerColor = colorResource(R.color.dashboard_card),
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, colorResource(R.color.dashboard_card_stroke))
+        ) {
             values.forEach { value ->
-                DropdownMenuItem(
-                    text = { Text(value) },
+                AppDropdownMenuItem(
+                    text = value,
                     onClick = {
                         expanded = false
                         onSelected(value)

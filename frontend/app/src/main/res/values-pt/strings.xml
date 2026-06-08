@@ -46,6 +46,13 @@
     <string name="project_actual_end">Fim real: %1$s</string>
     <string name="project_edit">Editar projeto</string>
     <string name="project_delete">Eliminar projeto</string>
+    <string name="confirm_delete_title">Confirmar eliminação</string>
+    <string name="confirm_delete_project_message">Tem a certeza de que pretende eliminar este projeto? Esta ação não pode ser revertida.</string>
+    <string name="confirm_delete_task_message">Tem a certeza de que pretende eliminar esta tarefa? Esta ação não pode ser revertida.</string>
+    <string name="confirm_delete_user_message">Tem a certeza de que pretende eliminar este utilizador? Esta ação não pode ser revertida.</string>
+    <string name="confirm_action">Confirmar</string>
+    <string name="confirm_complete_title">Concluir tarefa</string>
+    <string name="confirm_complete_task_message">Marcar esta tarefa como concluída?</string>
     <string name="project_remove_member">Remover</string>
     <string name="project_add_member">Adicionar membro</string>
     <string name="project_member_added">Membro adicionado.</string>
