@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -59,6 +60,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
@@ -1037,13 +1039,14 @@ private fun ProjectTaskListItem(
             )
         }
         StatusPill(status = task.statusText ?: "pending")
-        Image(
-            painter = painterResource(R.drawable.ic_arrow_right),
-            contentDescription = null,
-            modifier = Modifier
-                .padding(start = 6.dp)
-                .size(16.dp),
-            colorFilter = ColorFilter.tint(colorResource(R.color.dashboard_text_secondary))
+        CardIcon(
+            iconResId = R.drawable.ic_arrow_right,
+            containerSize = 28.dp,
+            iconSize = 14.dp,
+            cornerRadius = 8.dp,
+            backgroundColorResId = R.color.dashboard_muted,
+            tintColorResId = R.color.dashboard_text_secondary,
+            modifier = Modifier.padding(start = 8.dp)
         )
     }
 }
@@ -1176,48 +1179,74 @@ private fun TaskInfoTile(
     @DrawableRes iconResId: Int,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Column(
         modifier = modifier
+            .heightIn(min = 112.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(colorResource(R.color.dashboard_card))
             .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(12.dp))
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 10.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Box(
+        CardIcon(
+            iconResId = iconResId,
+            containerSize = 38.dp,
+            iconSize = 20.dp
+        )
+        Text(
+            text = label.uppercase(Locale.getDefault()),
             modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(colorResource(R.color.task_blue_soft)),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(iconResId),
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        Column(
+                .fillMaxWidth()
+                .padding(top = 10.dp),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 11.sp
+        )
+        Text(
+            text = value.ifBlank { "—" },
             modifier = Modifier
-                .weight(1f)
-                .padding(start = 10.dp)
-        ) {
-            Text(
-                text = label.uppercase(Locale.getDefault()),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = value.ifBlank { "—" },
-                modifier = Modifier.padding(top = 3.dp),
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            lineHeight = 16.sp
+        )
+    }
+}
+
+@Composable
+private fun CardIcon(
+    @DrawableRes iconResId: Int,
+    modifier: Modifier = Modifier,
+    containerSize: Dp = 40.dp,
+    iconSize: Dp = 20.dp,
+    cornerRadius: Dp = 12.dp,
+    @ColorRes backgroundColorResId: Int = R.color.task_blue_soft,
+    @ColorRes tintColorResId: Int = R.color.bottom_nav_selected
+) {
+    Box(
+        modifier = modifier
+            .size(containerSize)
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(colorResource(backgroundColorResId)),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(iconResId),
+            contentDescription = null,
+            modifier = Modifier.size(iconSize),
+            contentScale = ContentScale.Fit,
+            colorFilter = ColorFilter.tint(colorResource(tintColorResId))
+        )
     }
 }
 
@@ -2804,7 +2833,14 @@ private fun DashboardSummaryCard(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            Image(painterResource(iconResId), contentDescription = null, modifier = Modifier.size(22.dp))
+            CardIcon(
+                iconResId = iconResId,
+                containerSize = 36.dp,
+                iconSize = 18.dp,
+                cornerRadius = 10.dp,
+                backgroundColorResId = R.color.dashboard_muted,
+                tintColorResId = progressColorResId
+            )
         }
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             Text(
@@ -2894,7 +2930,15 @@ private fun DashboardTaskCard(
                 .fillMaxHeight()
                 .background(colorResource(task.accentColorResId))
         )
-        IconBubble(task.iconBackgroundColorResId, task.iconResId, size = 30.dp, iconSize = 16.dp, radius = 15.dp)
+        IconBubble(
+            backgroundColorResId = task.iconBackgroundColorResId,
+            iconResId = task.iconResId,
+            iconTintColorResId = task.accentColorResId,
+            size = 30.dp,
+            iconSize = 16.dp,
+            radius = 15.dp,
+            modifier = Modifier.padding(start = 10.dp)
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -3012,7 +3056,14 @@ private fun ProjectTaskCard(
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconBubble(task.iconBackgroundColorResId, task.iconResId, size = 34.dp, iconSize = 18.dp, radius = 17.dp)
+            IconBubble(
+                backgroundColorResId = task.iconBackgroundColorResId,
+                iconResId = task.iconResId,
+                iconTintColorResId = task.accentColorResId,
+                size = 34.dp,
+                iconSize = 18.dp,
+                radius = 17.dp
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -3337,19 +3388,26 @@ private fun Avatar(member: ProjectMember, size: Dp, modifier: Modifier = Modifie
 private fun IconBubble(
     @ColorRes backgroundColorResId: Int,
     @DrawableRes iconResId: Int,
+    @ColorRes iconTintColorResId: Int,
     size: Dp,
     iconSize: Dp,
-    radius: Dp
+    radius: Dp,
+    modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = Modifier
-            .padding(start = 12.dp)
+        modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(radius))
             .background(colorResource(backgroundColorResId)),
         contentAlignment = Alignment.Center
     ) {
-        Image(painterResource(iconResId), contentDescription = null, modifier = Modifier.size(iconSize))
+        Image(
+            painter = painterResource(iconResId),
+            contentDescription = null,
+            modifier = Modifier.size(iconSize),
+            contentScale = ContentScale.Fit,
+            colorFilter = ColorFilter.tint(colorResource(iconTintColorResId))
+        )
     }
 }
 
@@ -3523,7 +3581,13 @@ private fun PickerInput(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Image(painterResource(iconResId), contentDescription = null, modifier = Modifier.size(20.dp))
+        Image(
+            painter = painterResource(iconResId),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            contentScale = ContentScale.Fit,
+            colorFilter = ColorFilter.tint(colorResource(R.color.dashboard_text_secondary))
+        )
     }
 }
 
