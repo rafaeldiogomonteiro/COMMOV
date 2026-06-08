@@ -8,6 +8,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.LinearLayout
 import android.widget.NumberPicker
 import android.widget.Toast
@@ -88,6 +89,7 @@ import com.example.commov.data.local.SessionManager
 import com.example.commov.data.local.LocaleHelper
 import com.example.commov.data.remote.AuthApi
 import com.example.commov.data.remote.AdminApi
+import com.example.commov.data.remote.RegisterResult
 import com.example.commov.data.remote.AdminMutationResult
 import com.example.commov.data.remote.AdminUsersResult
 import com.example.commov.data.remote.ApiTask
@@ -117,6 +119,7 @@ import com.example.commov.ui.projects.CreateProjectActivity
 import com.example.commov.ui.projects.CreateTaskActivity
 import com.example.commov.ui.projects.ProjectsActivity
 import com.example.commov.ui.projects.TaskDetailActivity
+import com.example.commov.ui.auth.RegisterActivity
 import com.example.commov.ui.settings.SettingsActivity
 import com.example.commov.viewmodel.DashboardUiState
 import com.example.commov.viewmodel.DashboardViewModel
@@ -265,6 +268,348 @@ fun LoginScreen() {
                     }
                 }
             )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.login_no_account),
+                    color = colorResource(R.color.login_text_secondary),
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = stringResource(R.string.login_create_account_link),
+                    color = colorResource(R.color.login_link),
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable {
+                        activity.startActivity(Intent(activity, RegisterActivity::class.java))
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun RegisterScreen() {
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val authApi = remember { AuthApi() }
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+    var name by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(false) }
+    var requiredError by remember { mutableStateOf(false) }
+    var passwordMismatch by remember { mutableStateOf(false) }
+    var generalErrorResId by remember { mutableStateOf(0) }
+    var generalErrorMessage by remember { mutableStateOf<String?>(null) }
+
+    val apiBaseUrl = remember { com.example.commov.BuildConfig.API_BASE_URL }
+
+    fun clearErrors() {
+        requiredError = false
+        passwordMismatch = false
+        generalErrorResId = 0
+        generalErrorMessage = null
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colorResource(R.color.login_background))
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .fillMaxWidth()
+                .cardBackground(R.color.login_card, R.color.login_card_stroke, 8.dp)
+                .padding(start = 24.dp, top = 28.dp, end = 24.dp, bottom = 28.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                text = stringResource(R.string.register_title),
+                modifier = Modifier.fillMaxWidth(),
+                color = colorResource(R.color.login_text_primary),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = stringResource(R.string.register_subtitle),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                color = colorResource(R.color.login_text_secondary),
+                fontSize = 14.sp,
+                lineHeight = 18.sp
+            )
+
+            Text(
+                text = stringResource(R.string.register_name),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                color = colorResource(R.color.login_text_secondary),
+                fontSize = 16.sp
+            )
+            LoginInput(
+                value = name,
+                onValueChange = {
+                    name = it
+                    clearErrors()
+                },
+                iconResId = R.drawable.ic_admin,
+                contentDescription = stringResource(R.string.register_name),
+                keyboardType = KeyboardType.Text,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+
+            Text(
+                text = stringResource(R.string.register_username),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                color = colorResource(R.color.login_text_secondary),
+                fontSize = 16.sp
+            )
+            LoginInput(
+                value = username,
+                onValueChange = {
+                    username = it
+                    clearErrors()
+                },
+                iconResId = R.drawable.ic_admin,
+                contentDescription = stringResource(R.string.register_username),
+                keyboardType = KeyboardType.Text,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+
+            Text(
+                text = stringResource(R.string.register_email),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                color = colorResource(R.color.login_text_secondary),
+                fontSize = 16.sp
+            )
+            LoginInput(
+                value = email,
+                onValueChange = {
+                    email = it
+                    clearErrors()
+                },
+                iconResId = R.drawable.ic_mail,
+                contentDescription = stringResource(R.string.content_email_icon),
+                keyboardType = KeyboardType.Email,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+
+            Text(
+                text = stringResource(R.string.register_password),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                color = colorResource(R.color.login_text_secondary),
+                fontSize = 14.sp
+            )
+            LoginInput(
+                value = password,
+                onValueChange = {
+                    password = it
+                    clearErrors()
+                },
+                iconResId = R.drawable.ic_lock,
+                contentDescription = stringResource(R.string.content_password_icon),
+                keyboardType = KeyboardType.Password,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButtonLike(
+                        iconResId = R.drawable.ic_eye,
+                        contentDescription = stringResource(R.string.content_toggle_password),
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(38.dp),
+                        onClick = { passwordVisible = !passwordVisible }
+                    )
+                },
+                modifier = Modifier.padding(top = 6.dp)
+            )
+
+            Text(
+                text = stringResource(R.string.register_confirm_password),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                color = colorResource(R.color.login_text_secondary),
+                fontSize = 14.sp
+            )
+            LoginInput(
+                value = confirmPassword,
+                onValueChange = {
+                    confirmPassword = it
+                    clearErrors()
+                },
+                iconResId = R.drawable.ic_lock,
+                contentDescription = stringResource(R.string.content_password_icon),
+                keyboardType = KeyboardType.Password,
+                visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButtonLike(
+                        iconResId = R.drawable.ic_eye,
+                        contentDescription = stringResource(R.string.content_toggle_password),
+                        tint = Color.Unspecified,
+                        modifier = Modifier.size(38.dp),
+                        onClick = { confirmPasswordVisible = !confirmPasswordVisible }
+                    )
+                },
+                modifier = Modifier.padding(top = 6.dp)
+            )
+
+            if (requiredError) {
+                Text(
+                    text = stringResource(R.string.register_required_error),
+                    modifier = Modifier.padding(top = 12.dp),
+                    color = colorResource(R.color.login_error),
+                    fontSize = 12.sp
+                )
+            }
+            if (passwordMismatch) {
+                Text(
+                    text = stringResource(R.string.register_password_mismatch),
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = colorResource(R.color.login_error),
+                    fontSize = 12.sp
+                )
+            }
+            ErrorText(generalErrorResId)
+            generalErrorMessage?.let { message ->
+                Text(
+                    text = message,
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = colorResource(R.color.login_error),
+                    fontSize = 12.sp
+                )
+            }
+
+            if (generalErrorResId != 0 || generalErrorMessage != null) {
+                Text(
+                    text = "API: $apiBaseUrl",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    color = colorResource(R.color.login_text_secondary),
+                    fontSize = 10.sp
+                )
+            }
+
+            FilledActionButton(
+                text = stringResource(if (isLoading) R.string.register_loading else R.string.register_button),
+                iconResId = R.drawable.ic_arrow_right,
+                colorResId = R.color.login_button,
+                radius = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp)
+                    .height(48.dp),
+                onClick = {
+                    if (isLoading) return@FilledActionButton
+
+                    clearErrors()
+
+                    val nameTrim = name.trim()
+                    val usernameTrim = username.trim()
+                    val emailTrim = email.trim()
+                    val pw = password
+                    val cpw = confirmPassword
+
+                    if (nameTrim.isEmpty() || usernameTrim.isEmpty() || emailTrim.isEmpty() || pw.length < 6 || cpw.length < 6) {
+                        requiredError = true
+                        return@FilledActionButton
+                    }
+                    if (pw != cpw) {
+                        passwordMismatch = true
+                        return@FilledActionButton
+                    }
+
+                    isLoading = true
+
+                    Thread {
+                        val regResult = authApi.register(nameTrim, usernameTrim, emailTrim, pw)
+                        Log.d("RegisterScreen", "register result: $regResult")
+                        if (regResult is RegisterResult.Success) {
+                            // Registration succeeded. Do not auto-login.
+                            // Return the user to the login screen so they can sign in manually.
+                            mainHandler.post {
+                                isLoading = false
+                                Toast.makeText(
+                                    context,
+                                    context.getString(R.string.register_success),
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                activity.startActivity(Intent(activity, MainActivity::class.java))
+                                activity.finish()
+                            }
+                        } else {
+                            mainHandler.post {
+                                isLoading = false
+                                generalErrorMessage = null
+                                when (regResult) {
+                                    RegisterResult.ValidationError -> {
+                                        generalErrorResId = R.string.register_error_validation
+                                    }
+                                    RegisterResult.Conflict -> {
+                                        generalErrorResId = R.string.register_error_conflict
+                                    }
+                                    RegisterResult.NetworkError -> {
+                                        generalErrorResId = R.string.register_error_network
+                                    }
+                                    is RegisterResult.ServerError -> {
+                                        generalErrorResId = 0
+                                        generalErrorMessage = regResult.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.register_error_unknown)
+                                    }
+                                    else -> {
+                                        generalErrorResId = R.string.register_error_unknown
+                                    }
+                                }
+                            }
+                        }
+                    }.start()
+                }
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.register_have_account),
+                    color = colorResource(R.color.login_text_secondary),
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = stringResource(R.string.register_sign_in_link),
+                    color = colorResource(R.color.login_link),
+                    fontSize = 14.sp,
+                    modifier = Modifier.clickable {
+                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                        activity.finish()
+                    }
+                )
+            }
         }
     }
 }

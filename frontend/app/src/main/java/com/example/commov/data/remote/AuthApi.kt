@@ -1,5 +1,6 @@
 package com.example.commov.data.remote
 
+import android.util.Log
 import com.example.commov.BuildConfig
 import com.example.commov.data.local.AuthenticatedUser
 import org.json.JSONObject
@@ -9,7 +10,9 @@ import java.net.URL
 
 class AuthApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     fun login(email: String, password: String): LoginResult {
-        val connection = (URL("${baseUrl.trimEnd('/')}/login").openConnection() as HttpURLConnection).apply {
+        val targetUrl = "${baseUrl.trimEnd('/')}/login"
+        Log.d("AuthApi", "login -> POST $targetUrl")
+        val connection = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 10_000
@@ -28,21 +31,84 @@ class AuthApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 output.write(body.toByteArray(Charsets.UTF_8))
             }
 
-            val responseBody = if (connection.responseCode in 200..299) {
+            val code = connection.responseCode
+            val responseBody = if (code in 200..299) {
                 connection.inputStream.bufferedReader().use { it.readText() }
             } else {
                 connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
             }
+            Log.d("AuthApi", "login <- HTTP $code body=${responseBody.take(300)}")
 
-            when (connection.responseCode) {
+            when (code) {
                 HttpURLConnection.HTTP_OK -> parseLogin(responseBody)
                 HttpURLConnection.HTTP_UNAUTHORIZED -> LoginResult.InvalidCredentials
-                else -> LoginResult.ServerError(errorMessage(responseBody))
+                else -> {
+                    val extracted = errorMessage(responseBody)
+                    val detail = extracted ?: responseBody.take(160).ifBlank { null }
+                    val msg = if (detail != null) "HTTP $code: $detail" else "HTTP $code"
+                    LoginResult.ServerError(msg)
+                }
             }
-        } catch (_: IOException) {
+        } catch (e: IOException) {
+            Log.d("AuthApi", "login network error: ${e.message}")
             LoginResult.NetworkError
-        } catch (_: Exception) {
-            LoginResult.ServerError(null)
+        } catch (e: Exception) {
+            Log.d("AuthApi", "login unexpected error: ${e.javaClass.simpleName} ${e.message}")
+            LoginResult.ServerError("erro inesperado: ${e.message}")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun register(name: String, username: String, email: String, password: String): RegisterResult {
+        val targetUrl = "${baseUrl.trimEnd('/')}/register"
+        Log.d("AuthApi", "register -> POST $targetUrl")
+        val connection = (URL(targetUrl).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 10_000
+            readTimeout = 10_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+        }
+
+        return try {
+            val body = JSONObject()
+                .put("name", name)
+                .put("username", username)
+                .put("email", email)
+                .put("password", password)
+                .toString()
+
+            connection.outputStream.use { output ->
+                output.write(body.toByteArray(Charsets.UTF_8))
+            }
+
+            val code = connection.responseCode
+            val responseBody = if (code in 200..299) {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            }
+            Log.d("AuthApi", "register <- HTTP $code body=${responseBody.take(300)}")
+
+            when (code) {
+                HttpURLConnection.HTTP_CREATED -> RegisterResult.Success
+                HttpURLConnection.HTTP_BAD_REQUEST -> RegisterResult.ValidationError
+                HttpURLConnection.HTTP_CONFLICT -> RegisterResult.Conflict
+                else -> {
+                    val extracted = errorMessage(responseBody)
+                    val detail = extracted ?: responseBody.take(160).ifBlank { null }
+                    val msg = if (detail != null) "HTTP $code: $detail" else "HTTP $code"
+                    RegisterResult.ServerError(msg)
+                }
+            }
+        } catch (e: IOException) {
+            Log.d("AuthApi", "register network error: ${e.message}")
+            RegisterResult.NetworkError
+        } catch (e: Exception) {
+            Log.d("AuthApi", "register unexpected error: ${e.javaClass.simpleName} ${e.message}")
+            RegisterResult.ServerError("erro inesperado: ${e.message}")
         } finally {
             connection.disconnect()
         }
@@ -159,4 +225,12 @@ sealed interface CheckLoginResult {
     data object LoggedOut : CheckLoginResult
     data object NetworkError : CheckLoginResult
     data class ServerError(val message: String?) : CheckLoginResult
+}
+
+sealed interface RegisterResult {
+    data object Success : RegisterResult
+    data object ValidationError : RegisterResult
+    data object Conflict : RegisterResult
+    data object NetworkError : RegisterResult
+    data class ServerError(val message: String?) : RegisterResult
 }
