@@ -34,6 +34,13 @@ func main() {
 		ProjectRepo: projectRepo,
 		AuthService: authService,
 	}
+	userReportService := &services.UserReportService{
+		UserRepo:          userRepo,
+		ProjectRepo:       projectRepo,
+		TaskRepo:          taskRepo,
+		TaskTimeEntryRepo: taskTimeEntryRepo,
+		AuthService:       authService,
+	}
 	projectService := &services.ProjectService{
 		ProjectRepo:     projectRepo,
 		ProjectUserRepo: projectUserRepo,
@@ -54,7 +61,11 @@ func main() {
 	}
 
 	authRouter := &router.AuthRouter{AuthService: authService, UserService: userService}
-	userRouter := &router.UserRouter{UserService: userService, AuthService: authService}
+	userRouter := &router.UserRouter{
+		UserService:       userService,
+		UserReportService: userReportService,
+		AuthService:       authService,
+	}
 	projectRouter := &router.ProjectRouter{ProjectService: projectService, AuthService: authService}
 	taskRouter := &router.TaskRouter{TaskService: taskService, AuthService: authService}
 

@@ -50,6 +50,16 @@ func (r *ProjectRepo) Delete(ctx context.Context, projectID int) error {
 	return r.DB.WithContext(ctx).Delete(&entity.Project{}, "project_id = ?", projectID).Error
 }
 
+func (r *ProjectRepo) ListManagedByUserID(ctx context.Context, userID int) ([]entity.Project, error) {
+	var projects []entity.Project
+	err := r.DB.WithContext(ctx).
+		Where("manager_id = ?", userID).
+		Order("project_id desc").
+		Find(&projects).Error
+
+	return projects, err
+}
+
 func (r *ProjectRepo) CountUserReferences(ctx context.Context, userID int) (int64, error) {
 	var count int64
 	err := r.DB.WithContext(ctx).

@@ -37,3 +37,13 @@ func (r *TaskTimeEntryRepo) ListByTaskID(ctx context.Context, taskID int) ([]ent
 
 	return entries, err
 }
+
+func (r *TaskTimeEntryRepo) ListByUserID(ctx context.Context, userID int) ([]entity.TaskTimeEntry, error) {
+	var entries []entity.TaskTimeEntry
+	err := r.DB.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("work_date DESC, created_at DESC").
+		Find(&entries).Error
+
+	return entries, err
+}

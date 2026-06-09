@@ -1,9 +1,12 @@
 package com.example.commov.ui.compose
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Handler
@@ -78,20 +81,26 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.commov.MainActivity
 import com.example.commov.R
-import com.example.commov.data.local.SessionManager
 import com.example.commov.data.local.LocaleHelper
+import com.example.commov.data.local.PendingProfilePhotoStore
+import com.example.commov.data.local.SessionManager
+import com.example.commov.data.sync.ProfilePhotoSyncManager
 import com.example.commov.data.remote.AuthApi
 import com.example.commov.data.remote.AdminApi
 import com.example.commov.data.remote.RegisterResult
+import com.example.commov.data.remote.AdminExportResult
 import com.example.commov.data.remote.AdminMutationResult
 import com.example.commov.data.remote.AdminUsersResult
 import com.example.commov.data.remote.ApiTask
@@ -151,17 +160,68 @@ fun LoginScreen() {
     val context = LocalContext.current
     val activity = context.findActivity()
     val viewModel = remember { LoginViewModel(context.applicationContext) }
+    val pendingPhotoStore = remember { PendingProfilePhotoStore(context.applicationContext) }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
     var state by remember { mutableStateOf(LoginUiState("", "", false, 0, 0, 0, false, false)) }
+    var isSavingPhoto by remember { mutableStateOf(false) }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    val offlinePhotoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null || isSavingPhoto) {
+            return@rememberLauncherForActivityResult
+        }
+
+        isSavingPhoto = true
+        Thread {
+            val mimeType = context.contentResolver.getType(uri).orEmpty().ifBlank { "image/jpeg" }
+            val fileName = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "profile.jpg" } ?: "profile.jpg"
+            val bytes = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }.getOrNull()
+
+            mainHandler.post {
+                isSavingPhoto = false
+                if (bytes == null) {
+                    Toast.makeText(context, R.string.login_photo_save_error, Toast.LENGTH_LONG).show()
+                    return@post
+                }
+
+                runCatching {
+                    pendingPhotoStore.save(fileName, mimeType, bytes)
+                }.onSuccess {
+                    Toast.makeText(context, R.string.login_photo_saved_offline, Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    Toast.makeText(context, R.string.login_photo_save_error, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
 
     DisposableEffect(viewModel) {
         viewModel.observe { state = it }
         onDispose { }
     }
 
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     LaunchedEffect(state.loginAccepted) {
         if (state.loginAccepted) {
-            activity.startActivity(Intent(activity, DashboardActivity::class.java))
-            activity.finish()
+            Thread {
+                ProfilePhotoSyncManager.syncIfNeeded(context.applicationContext)
+                mainHandler.post {
+                    activity.startActivity(Intent(activity, DashboardActivity::class.java))
+                    activity.finish()
+                }
+            }.start()
         }
     }
 
@@ -275,6 +335,15 @@ fun LoginScreen() {
                         viewModel.onLoginClicked()
                     }
                 }
+            )
+            OutlinedActionButton(
+                text = stringResource(R.string.login_update_profile_picture),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+                    .height(48.dp),
+                enabled = !isSavingPhoto && !state.isLoading,
+                onClick = { offlinePhotoPickerLauncher.launch("image/*") }
             )
             Row(
                 modifier = Modifier
@@ -645,6 +714,12 @@ fun DashboardScreen() {
     DisposableEffect(viewModel) {
         viewModel.observe { state = it }
         onDispose { }
+    }
+
+    LaunchedEffect(Unit) {
+        Thread {
+            ProfilePhotoSyncManager.syncIfNeeded(context.applicationContext)
+        }.start()
     }
 
     LaunchedEffect(state.requiresLogin) {
@@ -2932,6 +3007,7 @@ fun AdminScreen() {
     var userToChangePassword by remember { mutableStateOf<ApiUser?>(null) }
     var userToDelete by remember { mutableStateOf<ApiUser?>(null) }
     var isSaving by remember { mutableStateOf(false) }
+    var isExporting by remember { mutableStateOf(false) }
 
     fun handleAuthFailure() {
         sessionManager.clear()
@@ -2994,6 +3070,38 @@ fun AdminScreen() {
                     is AdminMutationResult.ServerError -> Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
                 }
                 onFinished()
+            }
+        }.start()
+    }
+
+    fun exportUser(user: ApiUser) {
+        if (isExporting) return
+
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            handleAuthFailure()
+            return
+        }
+
+        isExporting = true
+        Thread {
+            val result = adminApi.exportUserReport(token, user.userId)
+            mainHandler.post {
+                when (result) {
+                    is AdminExportResult.Success -> {
+                        val opened = openExportedPdf(context, result.bytes, result.filename)
+                        Toast.makeText(
+                            context,
+                            if (opened) R.string.admin_export_success else R.string.admin_export_no_viewer,
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    AdminExportResult.Unauthorized -> handleAuthFailure()
+                    AdminExportResult.Forbidden -> Toast.makeText(context, R.string.admin_forbidden, Toast.LENGTH_LONG).show()
+                    AdminExportResult.NetworkError,
+                    is AdminExportResult.ServerError -> Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
+                }
+                isExporting = false
             }
         }.start()
     }
@@ -3133,6 +3241,7 @@ fun AdminScreen() {
                             .padding(top = 10.dp),
                         onEdit = { userToEdit = user },
                         onChangePassword = { userToChangePassword = user },
+                        onExport = { exportUser(user) },
                         onDelete = { userToDelete = user }
                     )
                 }
@@ -4047,6 +4156,26 @@ private fun SelectableMemberRow(
     }
 }
 
+private fun openExportedPdf(context: Context, bytes: ByteArray, filename: String): Boolean {
+    val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+    val safeName = filename.replace(Regex("[^A-Za-z0-9._-]"), "_")
+    val file = File(exportsDir, safeName)
+    file.writeBytes(bytes)
+
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/pdf")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+
+    return if (intent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(intent)
+        true
+    } else {
+        false
+    }
+}
+
 @Composable
 private fun AdminUserRow(
     user: ApiUser,
@@ -4054,6 +4183,7 @@ private fun AdminUserRow(
     modifier: Modifier = Modifier,
     onEdit: () -> Unit,
     onChangePassword: () -> Unit,
+    onExport: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -4162,6 +4292,13 @@ private fun AdminUserRow(
                     onClick = {
                         menuExpanded = false
                         onChangePassword()
+                    }
+                )
+                AppDropdownMenuItem(
+                    text = stringResource(R.string.admin_action_export),
+                    onClick = {
+                        menuExpanded = false
+                        onExport()
                     }
                 )
                 if (canDelete) {
@@ -5153,6 +5290,32 @@ private fun LanguageButton(
         contentAlignment = Alignment.Center
     ) {
         Text(text = text, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun OutlinedActionButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val textColor = if (enabled) {
+        colorResource(R.color.login_link)
+    } else {
+        colorResource(R.color.login_text_secondary)
+    }
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .border(1.dp, colorResource(R.color.login_input_stroke), RoundedCornerShape(6.dp))
+            .background(colorResource(R.color.login_input_background))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Text(text = text, color = textColor, fontSize = 16.sp)
     }
 }
 

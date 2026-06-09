@@ -13,6 +13,12 @@
     <string name="login_loading">A entrar…</string>
     <string name="login_no_account">Não tens conta? </string>
     <string name="login_create_account_link">cria uma</string>
+    <string name="login_update_profile_picture">Atualizar foto de perfil</string>
+    <string name="login_photo_saved_offline">Foto de perfil guardada. Será enviada quando iniciar sessão.</string>
+    <string name="login_photo_save_error">Não foi possível guardar a foto de perfil.</string>
+    <string name="notification_profile_photo_channel">Foto de perfil</string>
+    <string name="notification_profile_photo_uploaded_title">Foto de perfil atualizada</string>
+    <string name="notification_profile_photo_uploaded_body">A sua foto de perfil pendente foi enviada.</string>
     <string name="register_title">Registar conta</string>
     <string name="register_subtitle">Cria uma conta ComMov.</string>
     <string name="register_name">Nome</string>
@@ -224,7 +230,10 @@
     <string name="admin_create_subtitle">Preencha os dados para criar uma nova conta.</string>
     <string name="admin_action_edit">Editar</string>
     <string name="admin_action_password">Palavra-passe</string>
+    <string name="admin_action_export">Exportar</string>
     <string name="admin_action_delete">Eliminar</string>
+    <string name="admin_export_success">Relatório transferido.</string>
+    <string name="admin_export_no_viewer">Relatório guardado, mas não foi encontrada uma app para abrir PDF.</string>
     <string name="admin_inactive">Inativo</string>
     <string name="content_email_icon">Email</string>
     <string name="content_password_icon">Palavra-passe</string>

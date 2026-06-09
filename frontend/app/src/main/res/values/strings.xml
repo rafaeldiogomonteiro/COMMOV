@@ -13,6 +13,12 @@
     <string name="login_loading">Signing in…</string>
     <string name="login_no_account">Don\'t have an account? </string>
     <string name="login_create_account_link">Create one</string>
+    <string name="login_update_profile_picture">Update profile Picture</string>
+    <string name="login_photo_saved_offline">Profile photo saved. It will upload when you sign in.</string>
+    <string name="login_photo_save_error">Could not save profile photo.</string>
+    <string name="notification_profile_photo_channel">Profile photo</string>
+    <string name="notification_profile_photo_uploaded_title">Profile photo updated</string>
+    <string name="notification_profile_photo_uploaded_body">Your pending profile photo was uploaded.</string>
     <string name="register_title">Create account</string>
     <string name="register_subtitle">Sign up for a ComMov account.</string>
     <string name="register_name">Name</string>
@@ -224,7 +230,10 @@
     <string name="admin_create_subtitle">Fill in the details to create a new account.</string>
     <string name="admin_action_edit">Edit</string>
     <string name="admin_action_password">Password</string>
+    <string name="admin_action_export">Export</string>
     <string name="admin_action_delete">Delete</string>
+    <string name="admin_export_success">Report downloaded.</string>
+    <string name="admin_export_no_viewer">Report saved, but no PDF viewer was found.</string>
     <string name="admin_inactive">Inactive</string>
     <string name="content_email_icon">Email</string>
     <string name="content_password_icon">Password</string>
