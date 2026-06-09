@@ -95,6 +95,7 @@ import com.example.commov.MainActivity
 import com.example.commov.R
 import com.example.commov.data.local.LocaleHelper
 import com.example.commov.data.local.PendingProfilePhotoStore
+import com.example.commov.data.local.ProfilePhotoImageReader
 import com.example.commov.data.local.SessionManager
 import com.example.commov.data.sync.ProfilePhotoSyncManager
 import com.example.commov.data.remote.AuthApi
@@ -169,31 +170,37 @@ fun LoginScreen() {
         ActivityResultContracts.RequestPermission()
     ) { }
 
-    val offlinePhotoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val offlinePhotoPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
         if (uri == null || isSavingPhoto) {
             return@rememberLauncherForActivityResult
         }
 
         isSavingPhoto = true
+        val appContext = context.applicationContext
+        runCatching {
+            appContext.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
         Thread {
-            val mimeType = context.contentResolver.getType(uri).orEmpty().ifBlank { "image/jpeg" }
             val fileName = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "profile.jpg" } ?: "profile.jpg"
-            val bytes = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            }.getOrNull()
+            val normalizedFileName = if (fileName.contains('.')) fileName else "$fileName.jpg"
+            val bytes = ProfilePhotoImageReader.readCompressedJpeg(appContext, uri)
+                ?: ProfilePhotoImageReader.readRawBytes(appContext, uri)
+            val saveResult = runCatching {
+                requireNotNull(bytes) { "Could not read selected image" }
+                require(bytes.isNotEmpty()) { "Selected image is empty" }
+                pendingPhotoStore.save(normalizedFileName, "image/jpeg", bytes)
+            }
 
             mainHandler.post {
                 isSavingPhoto = false
-                if (bytes == null) {
-                    Toast.makeText(context, R.string.login_photo_save_error, Toast.LENGTH_LONG).show()
-                    return@post
-                }
-
-                runCatching {
-                    pendingPhotoStore.save(fileName, mimeType, bytes)
-                }.onSuccess {
+                if (saveResult.isSuccess) {
                     Toast.makeText(context, R.string.login_photo_saved_offline, Toast.LENGTH_LONG).show()
-                }.onFailure {
+                } else {
                     Toast.makeText(context, R.string.login_photo_save_error, Toast.LENGTH_LONG).show()
                 }
             }
@@ -343,7 +350,7 @@ fun LoginScreen() {
                     .padding(top = 12.dp)
                     .height(48.dp),
                 enabled = !isSavingPhoto && !state.isLoading,
-                onClick = { offlinePhotoPickerLauncher.launch("image/*") }
+                onClick = { offlinePhotoPickerLauncher.launch(arrayOf("image/*")) }
             )
             Row(
                 modifier = Modifier
@@ -3381,6 +3388,10 @@ fun SettingsScreen() {
             )
         }
     }
+    LaunchedEffect(Unit) {
+        currentUser = sessionManager.currentUser()
+    }
+
     val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null || isUploadingPhoto) {
             return@rememberLauncherForActivityResult
@@ -3489,6 +3500,68 @@ fun SettingsScreen() {
                         .padding(top = 2.dp),
                     color = colorResource(R.color.dashboard_text_secondary),
                     fontSize = 14.sp
+                )
+            }
+            SettingsPanel(Modifier.padding(top = 14.dp)) {
+                Text(
+                    text = stringResource(R.string.settings_profile_photo),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = stringResource(R.string.settings_profile_photo_description),
+                    modifier = Modifier.padding(top = 4.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 14.sp
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (profileMember != null) {
+                        Avatar(
+                            member = profileMember,
+                            size = 72.dp
+                        )
+                    }
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 16.dp)
+                    ) {
+                        Text(
+                            text = currentUser?.name ?: stringResource(R.string.settings_unknown_user),
+                            color = colorResource(R.color.dashboard_text_primary),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = stringResource(
+                                if (isUploadingPhoto) {
+                                    R.string.settings_uploading_photo
+                                } else {
+                                    R.string.settings_change_photo
+                                }
+                            ),
+                            modifier = Modifier.padding(top = 4.dp),
+                            color = colorResource(R.color.dashboard_text_secondary),
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+                OutlinedActionButton(
+                    text = stringResource(
+                        if (isUploadingPhoto) R.string.settings_uploading_photo else R.string.settings_change_photo
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 14.dp)
+                        .height(46.dp),
+                    enabled = !isUploadingPhoto,
+                    onClick = { photoPickerLauncher.launch("image/*") }
                 )
             }
             SettingsPanel(Modifier.padding(top = 14.dp)) {

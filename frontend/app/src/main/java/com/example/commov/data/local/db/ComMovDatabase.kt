@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [PendingProfilePhotoEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class ComMovDatabase : RoomDatabase() {
@@ -23,7 +23,10 @@ abstract class ComMovDatabase : RoomDatabase() {
                     context.applicationContext,
                     ComMovDatabase::class.java,
                     "commov.db"
-                ).build().also { instance = it }
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
+                    .also { instance = it }
             }
         }
     }

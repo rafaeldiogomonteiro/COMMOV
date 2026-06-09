@@ -23,7 +23,14 @@ object ProfilePhotoSyncManager {
         val photoApi = PhotoApi()
         val userApi = UserApi()
 
-        return when (val uploadResult = photoApi.uploadPhoto(token, pending.fileName, pending.imageBytes, pending.mimeType)) {
+        return when (
+            val uploadResult = photoApi.uploadPhoto(
+                token,
+                pending.fileName,
+                pending.imageBytes,
+                pending.mimeType
+            )
+        ) {
             is PhotoUploadResult.Success -> {
                 when (val profileResult = userApi.updateProfile(token, uploadResult.path)) {
                     is ProfileUpdateResult.Success -> {
