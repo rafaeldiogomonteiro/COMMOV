@@ -12,6 +12,17 @@ class SessionManager(context: Context) {
             .putString(KEY_USER_NAME, user.name)
             .putString(KEY_USER_EMAIL, user.email)
             .putString(KEY_USER_ROLE, user.role)
+            .putString(KEY_USER_PHOTO, user.photo)
+            .apply()
+    }
+
+    fun updateUser(user: AuthenticatedUser) {
+        preferences.edit()
+            .putInt(KEY_USER_ID, user.userId)
+            .putString(KEY_USER_NAME, user.name)
+            .putString(KEY_USER_EMAIL, user.email)
+            .putString(KEY_USER_ROLE, user.role)
+            .putString(KEY_USER_PHOTO, user.photo)
             .apply()
     }
 
@@ -31,7 +42,8 @@ class SessionManager(context: Context) {
             userId = preferences.getInt(KEY_USER_ID, 0),
             name = name,
             email = email,
-            role = role
+            role = role,
+            photo = preferences.getString(KEY_USER_PHOTO, "").orEmpty()
         )
     }
 
@@ -55,6 +67,7 @@ class SessionManager(context: Context) {
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_USER_ROLE = "user_role"
+        private const val KEY_USER_PHOTO = "user_photo"
     }
 }
 
@@ -62,5 +75,6 @@ data class AuthenticatedUser(
     val userId: Int,
     val name: String,
     val email: String,
-    val role: String
+    val role: String,
+    val photo: String = ""
 )

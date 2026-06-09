@@ -26,6 +26,7 @@ const photoUploadDir = "photos/image"
 func (r *UserRouter) Register(chiRouter chi.Router) {
 	chiRouter.Get("/users", r.list)
 	chiRouter.Post("/users", r.create)
+	chiRouter.Patch("/users/me", r.updateProfile)
 	chiRouter.Get("/users/{userId}", r.get)
 	chiRouter.Put("/users/{userId}", r.update)
 	chiRouter.Patch("/users/{userId}", r.update)
@@ -173,6 +174,36 @@ func (r *UserRouter) update(w http.ResponseWriter, req *http.Request) {
 		Role:     input.Role,
 		Active:   input.Active,
 	})
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, user)
+}
+
+func (r *UserRouter) updateProfile(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+
+	actor, loggedIn, err := r.AuthService.CheckLogin(req.Context(), authToken(req))
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+	if !loggedIn {
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	var input struct {
+		Photo string `json:"photo"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user, err := r.UserService.UpdateProfile(req.Context(), actor.UserID, input.Photo)
 	if err != nil {
 		writeUserServiceError(w, err)
 		return

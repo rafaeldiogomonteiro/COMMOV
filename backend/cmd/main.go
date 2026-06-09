@@ -27,6 +27,7 @@ func main() {
 	projectRepo := &postgres.ProjectRepo{DB: db}
 	projectUserRepo := &postgres.ProjectUserRepo{DB: db}
 	taskRepo := &postgres.TaskRepo{DB: db}
+	taskTimeEntryRepo := &postgres.TaskTimeEntryRepo{DB: db}
 	authService := &services.AuthService{UserRepo: userRepo}
 	userService := &services.UserService{
 		UserRepo:    userRepo,
@@ -39,10 +40,11 @@ func main() {
 		UserRepo:        userRepo,
 	}
 	taskService := &services.TaskService{
-		TaskRepo:        taskRepo,
-		ProjectRepo:     projectRepo,
-		ProjectUserRepo: projectUserRepo,
-		UserRepo:        userRepo,
+		TaskRepo:          taskRepo,
+		TaskTimeEntryRepo: taskTimeEntryRepo,
+		ProjectRepo:       projectRepo,
+		ProjectUserRepo:   projectUserRepo,
+		UserRepo:          userRepo,
 	}
 	if _, created, err := userService.EnsureDefaultUser(context.Background(), cfg.DefaultUser, cfg.DefaultUserPass); err != nil {
 		appLogger.Printf("failed to ensure default user: %v", err)

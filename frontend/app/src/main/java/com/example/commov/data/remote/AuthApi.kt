@@ -197,7 +197,8 @@ class AuthApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             userId = user.getInt("userId"),
             name = user.getString("name"),
             email = user.getString("email"),
-            role = user.getString("role")
+            role = user.getString("role"),
+            photo = user.optString("photo")
         )
     }
 

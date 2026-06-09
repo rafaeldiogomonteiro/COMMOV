@@ -23,6 +23,7 @@ func (r *TaskRouter) Register(chiRouter chi.Router) {
 	chiRouter.Patch("/tasks/{taskId}", r.update)
 	chiRouter.Delete("/tasks/{taskId}", r.delete)
 	chiRouter.Post("/tasks/{taskId}/time-spent", r.addTimeSpent)
+	chiRouter.Get("/tasks/{taskId}/time-entries", r.listTimeEntries)
 	chiRouter.Post("/tasks/{taskId}/complete", r.complete)
 	chiRouter.Patch("/tasks/{taskId}/complete", r.complete)
 	chiRouter.Get("/projects/{projectId}/tasks", r.listByProject)
@@ -233,6 +234,27 @@ func (r *TaskRouter) delete(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (r *TaskRouter) listTimeEntries(w http.ResponseWriter, req *http.Request) {
+	actor, ok := requireAuthenticated(w, req, r.AuthService)
+	if !ok {
+		return
+	}
+
+	taskID, err := intURLParam(req, "taskId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "taskId is invalid")
+		return
+	}
+
+	entries, err := r.TaskService.ListTimeEntries(req.Context(), actor.UserID, taskID)
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, entries)
 }
 
 func (r *TaskRouter) addTimeSpent(w http.ResponseWriter, req *http.Request) {

@@ -120,7 +120,8 @@ class ProjectsViewModel(
             name = name,
             initials = initials(name),
             avatarColorResId = avatarColor(index),
-            isManager = isManager
+            isManager = isManager,
+            photo = photo
         )
     }
 

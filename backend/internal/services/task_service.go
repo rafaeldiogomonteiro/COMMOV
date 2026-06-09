@@ -59,10 +59,11 @@ type TaskAddTimeSpentInput struct {
 }
 
 type TaskService struct {
-	TaskRepo        *postgres.TaskRepo
-	ProjectRepo     *postgres.ProjectRepo
-	ProjectUserRepo *postgres.ProjectUserRepo
-	UserRepo        *postgres.UserRepo
+	TaskRepo           *postgres.TaskRepo
+	TaskTimeEntryRepo  *postgres.TaskTimeEntryRepo
+	ProjectRepo        *postgres.ProjectRepo
+	ProjectUserRepo    *postgres.ProjectUserRepo
+	UserRepo           *postgres.UserRepo
 }
 
 func (s *TaskService) List(ctx context.Context, actorUserID int) ([]entity.Task, error) {
@@ -132,11 +133,33 @@ func (s *TaskService) Get(ctx context.Context, actorUserID int, taskID int) (*en
 	if err != nil {
 		return nil, err
 	}
-	if !hasManagementRole(actor) && task.UserID != actor.UserID {
-		return nil, fmt.Errorf("%w: task is not assigned to this user", ErrForbidden)
+	if err := s.ensureTaskAccess(ctx, actor, task); err != nil {
+		return nil, err
 	}
 
 	return task, nil
+}
+
+func (s *TaskService) ListTimeEntries(ctx context.Context, actorUserID int, taskID int) ([]entity.TaskTimeEntryView, error) {
+	actor, err := authenticatedActor(ctx, s.UserRepo, actorUserID)
+	if err != nil {
+		return nil, err
+	}
+
+	task, err := s.getTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureTaskAccess(ctx, actor, task); err != nil {
+		return nil, err
+	}
+
+	entries, err := s.TaskTimeEntryRepo.ListByTaskID(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("list task time entries: %w", err)
+	}
+
+	return entries, nil
 }
 
 func (s *TaskService) Create(ctx context.Context, actorUserID int, input TaskCreateInput) (*entity.Task, error) {
@@ -331,8 +354,8 @@ func (s *TaskService) AddTimeSpent(ctx context.Context, actorUserID int, taskID 
 	if err != nil {
 		return nil, err
 	}
-	if !hasManagementRole(actor) && task.UserID != actor.UserID {
-		return nil, fmt.Errorf("%w: task is not assigned to this user", ErrForbidden)
+	if err := s.ensureTaskTimeLogAccess(ctx, actor, task); err != nil {
+		return nil, err
 	}
 	if entity.IsCompletedStatus(task.Status) {
 		return nil, validationError("completed tasks cannot receive additional time")
@@ -341,24 +364,40 @@ func (s *TaskService) AddTimeSpent(ctx context.Context, actorUserID int, taskID 
 		return nil, validationError("timeSpent must be greater than 0")
 	}
 
+	observation := ""
+	if input.Observation != nil {
+		observation = strings.TrimSpace(*input.Observation)
+	}
+	if observation == "" {
+		return nil, validationError("observation is required")
+	}
+
 	project, err := s.getProject(ctx, task.ProjectID)
 	if err != nil {
 		return nil, err
 	}
+
+	workDate := currentDate()
 	if input.WorkDate != nil {
-		task.WorkDate = input.WorkDate
-	} else if task.WorkDate == nil {
-		today := currentDate()
-		task.WorkDate = &today
+		workDate = dateOnly(*input.WorkDate)
 	}
-	if input.Observation != nil {
-		task.Observation = strings.TrimSpace(*input.Observation)
-	}
-	if err := validateTaskDates(project, task.EstimatedEndDate, task.ActualEndDate, task.WorkDate); err != nil {
+	if err := validateWorkDate(project, workDate); err != nil {
 		return nil, err
 	}
 
+	entry := &entity.TaskTimeEntry{
+		TaskID:      task.TaskID,
+		UserID:      actor.UserID,
+		TimeSpent:   input.TimeSpent,
+		WorkDate:    workDate,
+		Observation: observation,
+	}
+	if err := s.TaskTimeEntryRepo.Create(ctx, entry); err != nil {
+		return nil, fmt.Errorf("create task time entry: %w", err)
+	}
+
 	task.TimeSpent += input.TimeSpent
+	task.WorkDate = &workDate
 	if err := s.TaskRepo.Update(ctx, task); err != nil {
 		return nil, fmt.Errorf("add task time spent: %w", err)
 	}
@@ -478,6 +517,26 @@ func (s *TaskService) getActiveUser(ctx context.Context, userID int, fieldName s
 	return user, nil
 }
 
+func (s *TaskService) ensureTaskAccess(ctx context.Context, actor *entity.User, task *entity.Task) error {
+	if hasManagementRole(actor) || task.UserID == actor.UserID {
+		return nil
+	}
+
+	isMember, err := s.ProjectUserRepo.ExistsByProjectAndUser(ctx, task.ProjectID, actor.UserID)
+	if err != nil {
+		return fmt.Errorf("check project membership: %w", err)
+	}
+	if isMember {
+		return nil
+	}
+
+	return fmt.Errorf("%w: task is not accessible to this user", ErrForbidden)
+}
+
+func (s *TaskService) ensureTaskTimeLogAccess(ctx context.Context, actor *entity.User, task *entity.Task) error {
+	return s.ensureTaskAccess(ctx, actor, task)
+}
+
 func (s *TaskService) ensureProjectMember(ctx context.Context, projectID int, userID int) error {
 	exists, err := s.ProjectUserRepo.ExistsByProjectAndUser(ctx, projectID, userID)
 	if err != nil {
@@ -539,6 +598,17 @@ func validateTaskNumbers(estimatedTime float64, timeSpent float64, completionRat
 	}
 	if completionRate < 0 || completionRate > 100 {
 		return validationError("completionRate must be between 0 and 100")
+	}
+
+	return nil
+}
+
+func validateWorkDate(project *entity.Project, workDate time.Time) error {
+	if project == nil {
+		return validationError("projectId is invalid")
+	}
+	if dateBefore(workDate, project.StartDate) {
+		return validationError("workDate cannot be before project startDate")
 	}
 
 	return nil

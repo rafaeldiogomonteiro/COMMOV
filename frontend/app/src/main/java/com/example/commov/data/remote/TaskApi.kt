@@ -2,6 +2,7 @@ package com.example.commov.data.remote
 
 import com.example.commov.BuildConfig
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -31,6 +32,32 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .put("workDate", workDate)
             .put("observation", observation)
         return sendJson(token, "/tasks/$taskId/time-spent", "POST", body)
+    }
+
+    fun listTimeEntries(token: String, taskId: Int): TaskTimeEntriesResult {
+        val connection = authedConnection("/tasks/$taskId/time-entries", token, "GET")
+        return try {
+            val body = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_OK -> {
+                    val array = JSONArray(body)
+                    val entries = buildList {
+                        for (index in 0 until array.length()) {
+                            add(parseTimeEntry(array.getJSONObject(index)))
+                        }
+                    }
+                    TaskTimeEntriesResult.Success(entries)
+                }
+                HttpURLConnection.HTTP_UNAUTHORIZED -> TaskTimeEntriesResult.Unauthorized
+                else -> TaskTimeEntriesResult.ServerError(errorMessage(body))
+            }
+        } catch (_: IOException) {
+            TaskTimeEntriesResult.NetworkError
+        } catch (_: Exception) {
+            TaskTimeEntriesResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
     }
 
     fun complete(
@@ -117,6 +144,20 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
+    private fun parseTimeEntry(json: JSONObject): ApiTaskTimeEntry {
+        return ApiTaskTimeEntry(
+            entryId = json.getInt("entryId"),
+            taskId = json.getInt("taskId"),
+            userId = json.getInt("userId"),
+            userName = json.optString("userName"),
+            userPhoto = json.optString("userPhoto"),
+            timeSpent = json.optDouble("timeSpent", 0.0),
+            workDate = json.optNullableString("workDate"),
+            observation = json.optString("observation"),
+            createdAt = json.optNullableString("createdAt")
+        )
+    }
+
     private fun parseTask(json: JSONObject): ApiTask {
         return ApiTask(
             taskId = json.getInt("taskId"),
@@ -145,6 +186,25 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     private fun errorMessage(responseBody: String): String? {
         return runCatching { JSONObject(responseBody).optString("error").takeIf { it.isNotBlank() } }.getOrNull()
     }
+}
+
+data class ApiTaskTimeEntry(
+    val entryId: Int,
+    val taskId: Int,
+    val userId: Int,
+    val userName: String,
+    val userPhoto: String,
+    val timeSpent: Double,
+    val workDate: String?,
+    val observation: String,
+    val createdAt: String?
+)
+
+sealed interface TaskTimeEntriesResult {
+    data class Success(val entries: List<ApiTaskTimeEntry>) : TaskTimeEntriesResult
+    data object Unauthorized : TaskTimeEntriesResult
+    data object NetworkError : TaskTimeEntriesResult
+    data class ServerError(val message: String?) : TaskTimeEntriesResult
 }
 
 sealed interface TaskResult {

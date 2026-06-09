@@ -83,6 +83,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.commov.MainActivity
 import com.example.commov.R
 import com.example.commov.data.local.SessionManager
@@ -93,6 +95,7 @@ import com.example.commov.data.remote.RegisterResult
 import com.example.commov.data.remote.AdminMutationResult
 import com.example.commov.data.remote.AdminUsersResult
 import com.example.commov.data.remote.ApiTask
+import com.example.commov.data.remote.ApiTaskTimeEntry
 import com.example.commov.data.remote.ApiUser
 import com.example.commov.data.remote.CreateUserInput
 import com.example.commov.data.remote.CreateProjectInput
@@ -102,11 +105,16 @@ import com.example.commov.data.remote.CreateTaskResult
 import com.example.commov.data.remote.ProjectDetailResult
 import com.example.commov.data.remote.ProjectMutationResult
 import com.example.commov.data.remote.ProjectsApi
+import com.example.commov.data.remote.PhotoApi
+import com.example.commov.data.remote.PhotoUploadResult
+import com.example.commov.data.remote.ProfileUpdateResult
 import com.example.commov.data.remote.TaskApi
 import com.example.commov.data.remote.UpdateProjectInput
+import com.example.commov.data.remote.UserApi
 import com.example.commov.data.remote.UpdateUserInput
 import com.example.commov.data.remote.UpdateTaskInput
 import com.example.commov.data.remote.TaskMutationResult
+import com.example.commov.data.remote.TaskTimeEntriesResult
 import com.example.commov.data.remote.TaskResult
 import com.example.commov.data.remote.UsersResult
 import com.example.commov.model.DashboardTask
@@ -1785,7 +1793,8 @@ private fun ApiUser.toProjectMember(index: Int, isManager: Boolean): ProjectMemb
             3 -> R.color.project_purple
             else -> R.color.task_status_gray_text
         },
-        isManager = isManager
+        isManager = isManager,
+        photo = photo
     )
 }
 
@@ -1841,6 +1850,78 @@ private fun TimeSpentSummaryCard(timeSpent: Double, estimatedTime: Double) {
 }
 
 @Composable
+private fun TimeSpentEntryCard(entry: ApiTaskTimeEntry, modifier: Modifier = Modifier) {
+    val member = ProjectMember(
+        userId = entry.userId,
+        name = entry.userName,
+        initials = entry.userName
+            .split(" ")
+            .filter { it.isNotBlank() }
+            .take(2)
+            .joinToString("") { it.first().uppercase() }
+            .ifBlank { "U" },
+        avatarColorResId = R.color.bottom_nav_selected,
+        photo = entry.userPhoto
+    )
+    val workDateLabel = entry.workDate?.take(10).orEmpty()
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(colorResource(R.color.dashboard_card))
+            .border(1.dp, colorResource(R.color.dashboard_card_stroke), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Avatar(member = member, size = 36.dp)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = entry.userName,
+                    modifier = Modifier.weight(1f),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = stringResource(R.string.task_detail_time_entry_hours, formatHours(entry.timeSpent)),
+                    color = colorResource(R.color.login_button),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            if (workDateLabel.isNotBlank()) {
+                Text(
+                    text = workDateLabel,
+                    modifier = Modifier.padding(top = 2.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 11.sp
+                )
+            }
+            if (entry.observation.isNotBlank()) {
+                Text(
+                    text = entry.observation,
+                    modifier = Modifier.padding(top = 6.dp),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun AddTimeSpentDialog(
     onDismiss: () -> Unit,
     onConfirm: (hours: Double, observation: String) -> Unit
@@ -1855,7 +1936,7 @@ private fun AddTimeSpentDialog(
         onDismiss = onDismiss,
         confirmText = stringResource(R.string.action_save),
         onConfirm = {
-            val parsedHours = hours.toDoubleOrNull()
+            val parsedHours = parseDecimalInput(hours)
             if (parsedHours == null || parsedHours <= 0 || observation.trim().isEmpty()) {
                 requiredError = true
             } else {
@@ -2451,6 +2532,7 @@ fun TaskDetailScreen(taskId: Int) {
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val canManageTasks = remember { sessionManager.canManageProjects() }
     var task by remember { mutableStateOf<ApiTask?>(null) }
+    var timeEntries by remember { mutableStateOf<List<ApiTaskTimeEntry>>(emptyList()) }
     var projectMembers by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
     var projectManagerId by remember { mutableStateOf(0) }
     var showAddTimeDialog by remember { mutableStateOf(false) }
@@ -2466,6 +2548,23 @@ fun TaskDetailScreen(taskId: Int) {
         activity.finish()
     }
 
+    fun loadTimeEntries() {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank() || taskId <= 0) {
+            return
+        }
+        Thread {
+            when (val result = taskApi.listTimeEntries(token, taskId)) {
+                is TaskTimeEntriesResult.Success -> {
+                    mainHandler.post { timeEntries = result.entries }
+                }
+                TaskTimeEntriesResult.Unauthorized -> mainHandler.post { authFailure() }
+                TaskTimeEntriesResult.NetworkError,
+                is TaskTimeEntriesResult.ServerError -> Unit
+            }
+        }.start()
+    }
+
     fun loadTask() {
         val token = sessionManager.token()
         if (token.isNullOrBlank() || taskId <= 0) {
@@ -2478,6 +2577,7 @@ fun TaskDetailScreen(taskId: Int) {
                 when (result) {
                     is TaskResult.Success -> {
                         task = result.task
+                        loadTimeEntries()
                         Thread {
                             val membersResult = projectsApi.projectUsers(token, result.task.projectId)
                             val managerId = when (val projectResult = projectsApi.getProject(token, result.task.projectId)) {
@@ -2517,8 +2617,14 @@ fun TaskDetailScreen(taskId: Int) {
                         afterSuccess()
                     }
                     TaskMutationResult.Unauthorized -> authFailure()
-                    TaskMutationResult.NetworkError,
-                    is TaskMutationResult.ServerError -> Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                    TaskMutationResult.NetworkError -> {
+                        Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                    }
+                    is TaskMutationResult.ServerError -> {
+                        val message = result.message?.takeIf { it.isNotBlank() }
+                            ?: context.getString(R.string.task_detail_error)
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }.start()
@@ -2640,20 +2746,28 @@ fun TaskDetailScreen(taskId: Int) {
                 estimatedTime = task?.estimatedTime ?: 0.0
             )
 
-            FilledActionButton(
-                text = stringResource(R.string.task_detail_add_time_spent),
-                colorResId = R.color.login_button,
-                radius = 12.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 14.dp)
-                    .height(50.dp),
-                onClick = {
-                    if (!isSaving) {
-                        showAddTimeDialog = true
-                    }
+            DetailSectionHeader(
+                title = stringResource(R.string.task_detail_time_entries),
+                count = timeEntries.size,
+                topPadding = 18.dp,
+                onAddClick = if (task?.status != "completed" && !isSaving) {
+                    { showAddTimeDialog = true }
+                } else {
+                    null
                 }
             )
+            if (timeEntries.isEmpty()) {
+                EmptyStateCard(text = stringResource(R.string.task_detail_no_time_entries))
+            } else {
+                timeEntries.forEach { entry ->
+                    TimeSpentEntryCard(
+                        entry = entry,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                    )
+                }
+            }
 
             if (!task?.description.isNullOrBlank()) {
                 FormSection(R.string.task_detail_description) {
@@ -3071,13 +3185,93 @@ fun SettingsScreen() {
     val viewModel = remember { SettingsViewModel() }
     val sessionManager = remember { SessionManager(context.applicationContext) }
     val authApi = remember { AuthApi() }
+    val photoApi = remember { PhotoApi() }
+    val userApi = remember { UserApi() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    val currentUser = remember { sessionManager.currentUser() }
+    var currentUser by remember { mutableStateOf(sessionManager.currentUser()) }
+    var isUploadingPhoto by remember { mutableStateOf(false) }
     var language by remember { mutableStateOf(viewModel.getState(context).language) }
     val englishSelected = LocaleHelper.LANGUAGE_ENGLISH == language
     val currentLanguageName = stringResource(
         if (englishSelected) R.string.language_english else R.string.language_portuguese
     )
+    val profileMember = remember(currentUser) {
+        currentUser?.let { user ->
+            ProjectMember(
+                userId = user.userId,
+                name = user.name,
+                initials = user.name
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                    .joinToString("") { it.first().uppercase() }
+                    .ifBlank { "U" },
+                avatarColorResId = R.color.bottom_nav_selected,
+                photo = user.photo
+            )
+        }
+    }
+    val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null || isUploadingPhoto) {
+            return@rememberLauncherForActivityResult
+        }
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            return@rememberLauncherForActivityResult
+        }
+
+        isUploadingPhoto = true
+        Thread {
+            val mimeType = context.contentResolver.getType(uri).orEmpty().ifBlank { "image/jpeg" }
+            val fileName = uri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "profile.jpg" } ?: "profile.jpg"
+            val bytes = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            }.getOrNull()
+
+            if (bytes == null) {
+                mainHandler.post {
+                    isUploadingPhoto = false
+                    Toast.makeText(context, R.string.settings_photo_error, Toast.LENGTH_LONG).show()
+                }
+                return@Thread
+            }
+
+            when (val uploadResult = photoApi.uploadPhoto(token, fileName, bytes, mimeType)) {
+                is PhotoUploadResult.Success -> {
+                    when (val profileResult = userApi.updateProfile(token, uploadResult.path)) {
+                        is ProfileUpdateResult.Success -> {
+                            sessionManager.updateUser(profileResult.user)
+                            mainHandler.post {
+                                currentUser = profileResult.user
+                                isUploadingPhoto = false
+                                Toast.makeText(context, R.string.settings_photo_updated, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                        ProfileUpdateResult.Unauthorized -> mainHandler.post {
+                            isUploadingPhoto = false
+                            sessionManager.clear()
+                            restartRoot(context, MainActivity::class.java)
+                        }
+                        ProfileUpdateResult.NetworkError,
+                        is ProfileUpdateResult.ServerError -> mainHandler.post {
+                            isUploadingPhoto = false
+                            Toast.makeText(context, R.string.settings_photo_error, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                PhotoUploadResult.Unauthorized -> mainHandler.post {
+                    isUploadingPhoto = false
+                    sessionManager.clear()
+                    restartRoot(context, MainActivity::class.java)
+                }
+                PhotoUploadResult.NetworkError,
+                is PhotoUploadResult.ServerError -> mainHandler.post {
+                    isUploadingPhoto = false
+                    Toast.makeText(context, R.string.settings_photo_error, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
 
     AppScaffold(selectedDestination = Destination.SETTINGS) {
         Column(
@@ -3969,7 +4163,7 @@ private fun AdminUserFormDialog(
                 requiredError = true
                 return@AppFormDialog
             }
-            onSave(name.trim(), username.trim(), email.trim(), password, role, active)
+            onSave(name.trim(), username.trim(), email.trim(), password, role, if (isEdit) active else true)
         }
     ) {
         Row(
@@ -4009,32 +4203,47 @@ private fun AdminUserFormDialog(
             singleLine = true,
             keyboardType = KeyboardType.Email
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Column(Modifier.weight(1f)) {
-                CreateTaskLabelNoTop(R.string.admin_role)
-                SelectInput(
-                    selected = roleLabel(role),
-                    values = listOf(roleUserLabel, roleManagerLabel, roleAdminLabel),
-                    onSelected = { selected ->
-                        role = when (selected) {
-                            roleAdminLabel -> "admin"
-                            roleManagerLabel -> "project_manager"
-                            else -> "user"
+        if (isEdit) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    CreateTaskLabelNoTop(R.string.admin_role)
+                    SelectInput(
+                        selected = roleLabel(role),
+                        values = listOf(roleUserLabel, roleManagerLabel, roleAdminLabel),
+                        onSelected = { selected ->
+                            role = when (selected) {
+                                roleAdminLabel -> "admin"
+                                roleManagerLabel -> "project_manager"
+                                else -> "user"
+                            }
                         }
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    CreateTaskLabelNoTop(R.string.admin_active)
+                    SelectInput(
+                        selected = if (active) activeLabel else inactiveLabel,
+                        values = listOf(activeLabel, inactiveLabel),
+                        onSelected = { selected -> active = selected == activeLabel }
+                    )
+                }
+            }
+        } else {
+            CreateTaskLabel(R.string.admin_role)
+            SelectInput(
+                selected = roleLabel(role),
+                values = listOf(roleUserLabel, roleManagerLabel, roleAdminLabel),
+                onSelected = { selected ->
+                    role = when (selected) {
+                        roleAdminLabel -> "admin"
+                        roleManagerLabel -> "project_manager"
+                        else -> "user"
                     }
-                )
-            }
-            Column(Modifier.weight(1f)) {
-                CreateTaskLabelNoTop(R.string.admin_active)
-                SelectInput(
-                    selected = if (active) activeLabel else inactiveLabel,
-                    values = listOf(activeLabel, inactiveLabel),
-                    onSelected = { selected -> active = selected == activeLabel }
-                )
-            }
+                }
+            )
         }
         if (!isEdit) {
             CreateTaskLabel(R.string.admin_password)
@@ -4244,6 +4453,14 @@ private fun currentDateString(): String {
     )
 }
 
+private fun parseDecimalInput(value: String): Double? {
+    val normalized = value.trim().replace(',', '.')
+    if (normalized.isEmpty()) {
+        return null
+    }
+    return normalized.toDoubleOrNull()
+}
+
 @Composable
 private fun AvatarStack(
     members: List<ProjectMember>,
@@ -4264,6 +4481,7 @@ private fun AvatarStack(
 
 @Composable
 private fun Avatar(member: ProjectMember, size: Dp, modifier: Modifier = Modifier) {
+    val photoUrl = member.photo.takeIf { it.isNotBlank() }?.let { PhotoApi().photoUrl(it) }
     Box(
         modifier = modifier
             .size(size)
@@ -4272,12 +4490,24 @@ private fun Avatar(member: ProjectMember, size: Dp, modifier: Modifier = Modifie
             .border(2.dp, colorResource(R.color.white), CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = member.initials,
-            color = colorResource(R.color.white),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
-        )
+        if (photoUrl != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(photoUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = member.name,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Text(
+                text = member.initials,
+                color = colorResource(R.color.white),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 

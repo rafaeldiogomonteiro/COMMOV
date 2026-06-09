@@ -377,6 +377,31 @@ func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, i
 	return user, nil
 }
 
+func (s *UserService) UpdateProfile(ctx context.Context, actorUserID int, photo string) (*entity.User, error) {
+	if actorUserID <= 0 {
+		return nil, fmt.Errorf("%w: missing authenticated user", ErrUnauthorized)
+	}
+
+	user, err := s.UserRepo.GetByID(ctx, actorUserID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, notFoundError("user not found")
+		}
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+	if !user.Active {
+		return nil, fmt.Errorf("%w: user is inactive", ErrUnauthorized)
+	}
+
+	user.Photo = strings.TrimSpace(photo)
+
+	if err := s.UserRepo.Update(ctx, user); err != nil {
+		return nil, fmt.Errorf("update profile: %w", err)
+	}
+
+	return user, nil
+}
+
 func (s *UserService) ChangePassword(ctx context.Context, actorUserID int, userID int, password string) error {
 	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
 		return err

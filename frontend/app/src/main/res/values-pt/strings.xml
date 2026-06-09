@@ -142,6 +142,9 @@
     <string name="task_detail_upload_photo">Anexar foto</string>
     <string name="task_detail_add_time">Adicionar tempo</string>
     <string name="task_detail_add_time_spent">Adicionar tempo gasto</string>
+    <string name="task_detail_time_entries">Registo de tempo</string>
+    <string name="task_detail_no_time_entries">Ainda sem tempo registado</string>
+    <string name="task_detail_time_entry_hours">+%1$sh</string>
     <string name="task_detail_time_spent_value">%1$sh gastas</string>
     <string name="task_detail_time_spent_of">de %1$sh estimadas</string>
     <string name="task_detail_observation_hint">O que fez?</string>
@@ -173,6 +176,12 @@
     <string name="settings_language_current">Atual: %1$s</string>
     <string name="settings_logout">Terminar sessão</string>
     <string name="settings_logout_description">Termina a sessão neste dispositivo.</string>
+    <string name="settings_profile_photo">Foto de perfil</string>
+    <string name="settings_profile_photo_description">Aparece nas tarefas e membros do projeto.</string>
+    <string name="settings_change_photo">Alterar foto</string>
+    <string name="settings_uploading_photo">A carregar foto…</string>
+    <string name="settings_photo_updated">Foto de perfil atualizada</string>
+    <string name="settings_photo_error">Não foi possível atualizar a foto de perfil</string>
     <string name="admin_title">Administração</string>
     <string name="admin_subtitle">Gerir utilizadores e acessos</string>
     <string name="admin_create_user">Novo utilizador</string>

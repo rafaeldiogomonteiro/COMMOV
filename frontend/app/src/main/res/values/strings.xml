@@ -142,6 +142,9 @@
     <string name="task_detail_upload_photo">Attach photo</string>
     <string name="task_detail_add_time">Add time</string>
     <string name="task_detail_add_time_spent">Add time spent</string>
+    <string name="task_detail_time_entries">Time log</string>
+    <string name="task_detail_no_time_entries">No time logged yet</string>
+    <string name="task_detail_time_entry_hours">+%1$sh</string>
     <string name="task_detail_time_spent_value">%1$sh spent</string>
     <string name="task_detail_time_spent_of">of %1$sh estimated</string>
     <string name="task_detail_observation_hint">What did you work on?</string>
@@ -173,6 +176,12 @@
     <string name="settings_language_current">Current: %1$s</string>
     <string name="settings_logout">Sign out</string>
     <string name="settings_logout_description">End this session on the device.</string>
+    <string name="settings_profile_photo">Profile photo</string>
+    <string name="settings_profile_photo_description">Shown on tasks and project members.</string>
+    <string name="settings_change_photo">Change photo</string>
+    <string name="settings_uploading_photo">Uploading photo…</string>
+    <string name="settings_photo_updated">Profile photo updated</string>
+    <string name="settings_photo_error">Could not update profile photo</string>
     <string name="admin_title">Administration</string>
     <string name="admin_subtitle">Manage users and access</string>
     <string name="admin_create_user">New user</string>
