@@ -27,6 +27,7 @@ class ProjectsViewModel(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var observer: StateObserver? = null
+    private var refreshGeneration = 0
     private var state = ProjectsUiState(
         projects = emptyList(),
         canCreateTasks = sessionManager.canManageProjects(),
@@ -43,6 +44,16 @@ class ProjectsViewModel(
         refresh()
     }
 
+    fun removeProject(projectId: Int) {
+        if (projectId <= 0) {
+            return
+        }
+        state = state.copy(
+            projects = state.projects.filter { it.projectId != projectId }
+        )
+        publish()
+    }
+
     private fun refresh() {
         val token = sessionManager.token()
         if (token.isNullOrBlank()) {
@@ -51,9 +62,13 @@ class ProjectsViewModel(
             return
         }
 
+        val generation = ++refreshGeneration
         Thread {
             val result = projectsApi.projects(token)
             mainHandler.post {
+                if (generation != refreshGeneration) {
+                    return@post
+                }
                 when (result) {
                     is ProjectsResult.Success -> {
                         state = state.copy(

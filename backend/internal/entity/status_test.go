@@ -12,6 +12,7 @@ func TestNormalizeProjectStatus(t *testing.T) {
 		{"ACTIVE", ProjectStatusActive, true},
 		{" completed ", ProjectStatusCompleted, true},
 		{"on_hold", ProjectStatusOnHold, true},
+		{"cancelled", ProjectStatusCancelled, true},
 		{"", ProjectStatusActive, true},
 		{"archived", "", false},
 	}

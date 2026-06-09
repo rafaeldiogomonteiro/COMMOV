@@ -188,8 +188,8 @@ func (s *ProjectService) Update(ctx context.Context, actorUserID int, projectID 
 	}
 	if entity.IsCompletedStatus(project.Status) {
 		if project.ActualEndDate == nil {
-			today := currentDate()
-			project.ActualEndDate = &today
+			completionDate := completionDateForProject(project.StartDate)
+			project.ActualEndDate = &completionDate
 		}
 	}
 
@@ -397,6 +397,15 @@ func validateProjectDates(startDate time.Time, estimatedEndDate time.Time, actua
 	}
 
 	return nil
+}
+
+func completionDateForProject(startDate time.Time) time.Time {
+	today := currentDate()
+	if dateBefore(today, startDate) {
+		return dateOnly(startDate)
+	}
+
+	return today
 }
 
 func uniquePositiveIDs(ids []int) []int {

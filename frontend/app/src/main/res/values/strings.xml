@@ -79,6 +79,7 @@
     <string name="project_status_active">Active</string>
     <string name="project_status_completed">Completed</string>
     <string name="project_status_on_hold">On hold</string>
+    <string name="project_status_cancelled">Cancelled</string>
     <string name="project_select_member">Select a user</string>
     <string name="project_no_users_available">No users available to add.</string>
     <string name="project_updated">Project updated.</string>
@@ -125,6 +126,7 @@
     <string name="create_task_required_error">Title, assignee, estimated end date and estimated time are required.</string>
     <string name="create_task_members_error">Could not load project members.</string>
     <string name="create_task_error">Could not create task.</string>
+    <string name="create_task_after_project_end_warning">The task end date is after the project end date (%1$s).</string>
     <string name="task_detail_title">Task</string>
     <string name="task_detail_progress">Time progress</string>
     <string name="task_detail_log_work">Log work</string>

@@ -818,7 +818,10 @@ fun ProjectsScreen() {
                     }
                     ProjectMutationResult.NetworkError,
                     is ProjectMutationResult.ServerError -> {
-                        Toast.makeText(context, R.string.project_action_error, Toast.LENGTH_LONG).show()
+                        val message = (result as? ProjectMutationResult.ServerError)?.message
+                            ?.takeIf { it.isNotBlank() }
+                            ?: context.getString(R.string.project_action_error)
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -911,7 +914,10 @@ fun ProjectsScreen() {
                         onEdit = {
                             editName = project.nameText.orEmpty()
                             editDescription = project.descriptionText.orEmpty()
-                            editStatus = project.status
+                            editStatus = when (project.status.lowercase(Locale.getDefault())) {
+                                "on_hold" -> "cancelled"
+                                else -> project.status
+                            }
                             showEditProject = true
                         },
                         onDelete = { showDeleteProjectConfirm = true },
@@ -976,10 +982,14 @@ fun ProjectsScreen() {
             onDismiss = { showDeleteProjectConfirm = false },
             onConfirm = {
                 showDeleteProjectConfirm = false
+                val deletedProjectId = project.projectId
                 runProjectMutation(
-                    mutation = { token -> projectsApi.deleteProject(token, project.projectId) },
+                    mutation = { token -> projectsApi.deleteProject(token, deletedProjectId) },
                     successMessageResId = R.string.project_deleted,
-                    onSuccess = { selectedProjectId = null }
+                    onSuccess = {
+                        selectedProjectId = null
+                        viewModel.removeProject(deletedProjectId)
+                    }
                 )
             }
         )
@@ -1168,7 +1178,8 @@ private fun ProjectDetailView(
                     ) {
                         StatusPill(
                             status = project.status,
-                            onDark = true
+                            onDark = true,
+                            labelProvider = { projectStatusLabel(it) }
                         )
                         Text(
                             text = stringResource(R.string.project_tasks_count, project.taskCount),
@@ -1554,7 +1565,8 @@ private fun TeamMemberCard(
 private fun StatusPill(
     status: String,
     modifier: Modifier = Modifier,
-    onDark: Boolean = false
+    onDark: Boolean = false,
+    labelProvider: @Composable (String) -> String = { taskStatusLabel(it) }
 ) {
     val normalized = status.lowercase(Locale.getDefault())
     val backgroundColor = if (onDark) {
@@ -1563,7 +1575,7 @@ private fun StatusPill(
         colorResource(
             when (normalized) {
                 "completed", "done" -> R.color.project_green_soft
-                "blocked", "cancelled" -> R.color.task_red_soft
+                "blocked", "cancelled", "on_hold" -> R.color.task_red_soft
                 "in_progress", "active", "pending" -> R.color.task_blue_soft
                 else -> R.color.task_status_gray_bg
             }
@@ -1575,7 +1587,7 @@ private fun StatusPill(
         colorResource(
             when (normalized) {
                 "completed", "done" -> R.color.project_green
-                "blocked", "cancelled" -> R.color.task_red
+                "blocked", "cancelled", "on_hold" -> R.color.task_red
                 "in_progress", "active" -> R.color.bottom_nav_selected
                 else -> R.color.task_status_gray_text
             }
@@ -1588,7 +1600,7 @@ private fun StatusPill(
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
         Text(
-            text = taskStatusLabel(status).uppercase(Locale.getDefault()),
+            text = labelProvider(status).uppercase(Locale.getDefault()),
             color = textColor,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
@@ -1760,7 +1772,13 @@ private fun formatHours(value: Double): String {
     }
 }
 
-private fun projectStatusValues(): List<String> = listOf("active", "completed", "on_hold")
+private fun isDateAfter(date: String?, reference: String?): Boolean {
+    val normalizedDate = date?.take(10)?.takeIf { it.length == 10 } ?: return false
+    val normalizedReference = reference?.take(10)?.takeIf { it.length == 10 } ?: return false
+    return normalizedDate > normalizedReference
+}
+
+private fun projectStatusValues(): List<String> = listOf("active", "completed", "cancelled")
 
 @Composable
 private fun projectStatusLabels(): List<String> {
@@ -1771,6 +1789,7 @@ private fun projectStatusLabels(): List<String> {
 private fun projectStatusLabel(status: String): String {
     return when (status.lowercase(Locale.getDefault())) {
         "completed" -> stringResource(R.string.project_status_completed)
+        "cancelled" -> stringResource(R.string.project_status_cancelled)
         "on_hold" -> stringResource(R.string.project_status_on_hold)
         else -> stringResource(R.string.project_status_active)
     }
@@ -2331,6 +2350,10 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
     var location by remember { mutableStateOf("") }
     var requiredError by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
+    var projectEstimatedEndDate by remember { mutableStateOf<String?>(null) }
+    val taskDateAfterProjectEnd = remember(estimatedEndDate, projectEstimatedEndDate) {
+        isDateAfter(estimatedEndDate, projectEstimatedEndDate)
+    }
 
     LaunchedEffect(projectId) {
         val token = sessionManager.token()
@@ -2341,8 +2364,22 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
         }
 
         Thread {
+            val projectResult = projectsApi.getProject(token, projectId)
             val result = projectsApi.projectUsers(token, projectId)
             mainHandler.post {
+                when (projectResult) {
+                    is ProjectDetailResult.Success -> {
+                        projectEstimatedEndDate = projectResult.project.estimatedEndDate?.take(10)
+                    }
+                    ProjectDetailResult.Unauthorized -> {
+                        sessionManager.clear()
+                        activity.startActivity(Intent(activity, MainActivity::class.java))
+                        activity.finish()
+                        return@post
+                    }
+                    ProjectDetailResult.NetworkError,
+                    is ProjectDetailResult.ServerError -> Unit
+                }
                 when (result) {
                     is UsersResult.Success -> {
                         assignees = result.users
@@ -2431,6 +2468,18 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                     iconResId = R.drawable.ic_calendar_clock,
                     onClick = { showDatePicker(context) { estimatedEndDate = it } }
                 )
+                if (taskDateAfterProjectEnd && !projectEstimatedEndDate.isNullOrBlank()) {
+                    Text(
+                        text = stringResource(
+                            R.string.create_task_after_project_end_warning,
+                            projectEstimatedEndDate.orEmpty()
+                        ),
+                        modifier = Modifier.padding(top = 8.dp),
+                        color = colorResource(R.color.task_orange),
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                }
                 CreateTaskLabel(R.string.create_task_estimated_time)
                 CreateTaskInput(
                     value = estimatedTime,
@@ -2473,6 +2522,17 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                         estimatedTimeValue < 0
                     ) {
                         requiredError = true
+                        return@FilledActionButton
+                    }
+                    if (taskDateAfterProjectEnd && !projectEstimatedEndDate.isNullOrBlank()) {
+                        Toast.makeText(
+                            context,
+                            context.getString(
+                                R.string.create_task_after_project_end_warning,
+                                projectEstimatedEndDate
+                            ),
+                            Toast.LENGTH_LONG
+                        ).show()
                         return@FilledActionButton
                     }
                     val token = sessionManager.token()
@@ -2655,7 +2715,11 @@ fun TaskDetailScreen(taskId: Int) {
                                 location = task?.location
                             )
                         },
-                        successMessage = R.string.task_detail_updated
+                        successMessage = R.string.task_detail_updated,
+                        afterSuccess = {
+                            activity.setResult(Activity.RESULT_OK)
+                            loadTask()
+                        }
                     )
                 }
             }
@@ -2980,19 +3044,16 @@ fun AdminScreen() {
                 AdminMetricCard(
                     label = stringResource(R.string.admin_users),
                     value = users.size.toString(),
-                    colorResId = R.color.bottom_nav_selected,
                     modifier = Modifier.weight(1f)
                 )
                 AdminMetricCard(
                     label = stringResource(R.string.admin_metric_admins),
                     value = adminCount.toString(),
-                    colorResId = R.color.project_purple,
                     modifier = Modifier.weight(1f)
                 )
                 AdminMetricCard(
                     label = stringResource(R.string.admin_metric_managers),
                     value = managerCount.toString(),
-                    colorResId = R.color.project_green,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -3681,7 +3742,6 @@ private fun DashboardSummaryCard(
 private fun AdminMetricCard(
     label: String,
     value: String,
-    @ColorRes colorResId: Int,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -3690,15 +3750,8 @@ private fun AdminMetricCard(
             .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
             .padding(horizontal = 10.dp, vertical = 9.dp)
     ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(colorResource(colorResId))
-        )
         Text(
             text = value,
-            modifier = Modifier.padding(top = 8.dp),
             color = colorResource(R.color.dashboard_text_primary),
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
@@ -3835,7 +3888,7 @@ private fun ProjectCard(
                     fontSize = 13.sp
                 )
                 Text(
-                    text = stringResource(R.string.project_status, project.status),
+                    text = stringResource(R.string.project_status, projectStatusLabel(project.status)),
                     modifier = Modifier.padding(top = 2.dp),
                     color = colorResource(R.color.dashboard_text_secondary),
                     fontSize = 12.sp
@@ -4779,15 +4832,11 @@ private fun EditProjectDialog(
                     singleLine = false
                 )
                 CreateTaskLabel(R.string.create_task_status)
-                SelectInput(
-                    selected = projectStatusLabel(status),
-                    values = statusOptions,
-                    onSelected = { selected ->
-                        val index = statusOptions.indexOf(selected)
-                        if (index >= 0) {
-                            onStatusChange(statusValues[index])
-                        }
-                    }
+                StatusChoiceInput(
+                    selected = status,
+                    labels = statusOptions,
+                    values = statusValues,
+                    onSelected = onStatusChange
                 )
             }
 
@@ -4904,6 +4953,71 @@ private fun AppFormDialog(
                         .weight(1f)
                         .height(46.dp),
                     onClick = onConfirm
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusChoiceInput(
+    selected: String,
+    labels: List<String>,
+    values: List<String>,
+    onSelected: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        values.forEachIndexed { index, value ->
+            val label = labels.getOrElse(index) { value }
+            val isSelected = value.equals(selected, ignoreCase = true)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (isSelected) {
+                            colorResource(R.color.task_blue_soft)
+                        } else {
+                            colorResource(R.color.dashboard_background)
+                        }
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = colorResource(
+                            if (isSelected) R.color.bottom_nav_selected else R.color.dashboard_card_stroke
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable { onSelected(value) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .border(
+                            width = 2.dp,
+                            color = colorResource(
+                                if (isSelected) R.color.bottom_nav_selected else R.color.dashboard_card_stroke
+                            ),
+                            shape = CircleShape
+                        )
+                        .background(
+                            if (isSelected) colorResource(R.color.bottom_nav_selected) else Color.Transparent
+                        )
+                )
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(start = 12.dp),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 15.sp,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
         }

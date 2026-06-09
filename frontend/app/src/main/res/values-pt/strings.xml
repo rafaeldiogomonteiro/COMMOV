@@ -79,6 +79,7 @@
     <string name="project_status_active">Ativo</string>
     <string name="project_status_completed">Concluído</string>
     <string name="project_status_on_hold">Em pausa</string>
+    <string name="project_status_cancelled">Cancelado</string>
     <string name="project_select_member">Selecionar utilizador</string>
     <string name="project_no_users_available">Não há utilizadores disponíveis.</string>
     <string name="project_updated">Projeto atualizado.</string>
@@ -125,6 +126,7 @@
     <string name="create_task_required_error">Título, responsável, data estimada de fim e tempo estimado são obrigatórios.</string>
     <string name="create_task_members_error">Não foi possível carregar os membros do projeto.</string>
     <string name="create_task_error">Não foi possível criar a tarefa.</string>
+    <string name="create_task_after_project_end_warning">A data de fim da tarefa é posterior à data de fim do projeto (%1$s).</string>
     <string name="task_detail_title">Tarefa</string>
     <string name="task_detail_progress">Progresso de tempo</string>
     <string name="task_detail_log_work">Registar trabalho</string>

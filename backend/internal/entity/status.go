@@ -6,6 +6,7 @@ const (
 	ProjectStatusActive    = "active"
 	ProjectStatusCompleted = "completed"
 	ProjectStatusOnHold    = "on_hold"
+	ProjectStatusCancelled = "cancelled"
 
 	TaskStatusPending    = "pending"
 	TaskStatusInProgress = "in_progress"
@@ -15,7 +16,7 @@ const (
 
 func IsValidProjectStatus(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case ProjectStatusActive, ProjectStatusCompleted, ProjectStatusOnHold:
+	case ProjectStatusActive, ProjectStatusCompleted, ProjectStatusOnHold, ProjectStatusCancelled:
 		return true
 	default:
 		return false
