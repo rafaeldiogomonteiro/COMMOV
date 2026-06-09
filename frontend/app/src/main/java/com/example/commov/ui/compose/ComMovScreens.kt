@@ -2748,36 +2748,12 @@ fun AdminScreen() {
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val currentUser = remember { sessionManager.currentUser() }
     var users by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
-    var name by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("user") }
-    var active by remember { mutableStateOf(true) }
-    var editingUserId by remember { mutableStateOf<Int?>(null) }
-    var requiredError by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var userToEdit by remember { mutableStateOf<ApiUser?>(null) }
+    var userToChangePassword by remember { mutableStateOf<ApiUser?>(null) }
     var userToDelete by remember { mutableStateOf<ApiUser?>(null) }
-
-    fun clearForm() {
-        editingUserId = null
-        name = ""
-        username = ""
-        email = ""
-        password = ""
-        role = "user"
-        active = true
-    }
-
-    fun loadUserIntoForm(user: ApiUser) {
-        editingUserId = user.userId
-        name = user.name
-        username = user.username
-        email = user.email
-        password = ""
-        role = user.role.ifBlank { "user" }
-        active = user.active
-    }
+    var isSaving by remember { mutableStateOf(false) }
 
     fun handleAuthFailure() {
         sessionManager.clear()
@@ -2856,9 +2832,17 @@ fun AdminScreen() {
 
     val adminCount = users.count { it.role == "admin" }
     val managerCount = users.count { it.role == "project_manager" }
-    val roleUserLabel = stringResource(R.string.admin_role_user)
-    val roleManagerLabel = stringResource(R.string.admin_role_manager)
-    val roleAdminLabel = stringResource(R.string.admin_role_admin)
+    val activeCount = users.count { it.active }
+    val filteredUsers = users.filter { user ->
+        if (searchQuery.isBlank()) {
+            true
+        } else {
+            val query = searchQuery.trim().lowercase()
+            user.name.lowercase().contains(query) ||
+                user.username.lowercase().contains(query) ||
+                user.email.lowercase().contains(query)
+        }
+    }
 
     AppScaffold(selectedDestination = Destination.ADMIN) {
         Column(
@@ -2867,20 +2851,9 @@ fun AdminScreen() {
                 .verticalScroll(rememberScrollState())
                 .screenContentPadding(bottom = 24.dp)
         ) {
-            Text(
-                text = stringResource(R.string.admin_title),
-                modifier = Modifier.fillMaxWidth(),
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(R.string.admin_subtitle),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                color = colorResource(R.color.dashboard_text_secondary),
-                fontSize = 15.sp
+            ScreenHeader(
+                title = stringResource(R.string.admin_title),
+                subtitle = stringResource(R.string.admin_subtitle)
             )
 
             Row(
@@ -2910,206 +2883,164 @@ fun AdminScreen() {
                 )
             }
 
-            SettingsPanel(Modifier.padding(top = 16.dp)) {
-                Text(
-                    text = stringResource(R.string.admin_create_user).uppercase(Locale.getDefault()),
-                    modifier = Modifier.fillMaxWidth(),
-                    color = colorResource(R.color.dashboard_text_secondary),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        CreateTaskLabelNoTop(R.string.admin_name)
-                        CreateTaskInput(
-                            value = name,
-                            onValueChange = {
-                                name = it
-                                requiredError = false
-                            },
-                            singleLine = true
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
-                        CreateTaskLabelNoTop(R.string.admin_username)
-                        CreateTaskInput(
-                            value = username,
-                            onValueChange = {
-                                username = it
-                                requiredError = false
-                            },
-                            singleLine = true
-                        )
-                    }
-                }
-                CreateTaskLabel(R.string.admin_email)
-                CreateTaskInput(
-                    value = email,
-                    onValueChange = {
-                        email = it
-                        requiredError = false
-                    },
-                    singleLine = true,
-                    keyboardType = KeyboardType.Email
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        CreateTaskLabelNoTop(R.string.admin_password)
-                        CreateTaskInput(
-                            value = password,
-                            onValueChange = {
-                                password = it
-                                requiredError = false
-                            },
-                            singleLine = true,
-                            keyboardType = KeyboardType.Password,
-                            visualTransformation = PasswordVisualTransformation()
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
-                        CreateTaskLabelNoTop(R.string.admin_role)
-                        SelectInput(
-                            selected = roleLabel(role),
-                            values = listOf(roleUserLabel, roleManagerLabel, roleAdminLabel),
-                            onSelected = { selected ->
-                                role = when (selected) {
-                                    roleAdminLabel -> "admin"
-                                    roleManagerLabel -> "project_manager"
-                                    else -> "user"
-                                }
-                            }
-                        )
-                    }
-                }
-                if (requiredError) {
-                    Text(
-                        text = stringResource(R.string.admin_required_error),
-                        modifier = Modifier.padding(top = 12.dp),
-                        color = colorResource(R.color.login_error),
-                        fontSize = 12.sp
-                    )
-                }
-                if (editingUserId != null) {
-                    FilledActionButton(
-                        text = stringResource(R.string.admin_cancel_edit),
-                        colorResId = R.color.task_status_gray_text,
-                        radius = 6.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp)
-                            .height(42.dp),
-                        onClick = { clearForm() }
-                    )
-                }
-                FilledActionButton(
-                    text = stringResource(
-                        if (editingUserId == null) R.string.admin_save_user else R.string.admin_update_user
-                    ),
-                    colorResId = R.color.login_button,
-                    radius = 6.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 18.dp)
-                        .height(46.dp),
-                    onClick = {
-                        if (isSaving) {
-                            return@FilledActionButton
-                        }
-                        val isEdit = editingUserId != null
-                        if (
-                            name.trim().isEmpty() ||
-                            username.trim().isEmpty() ||
-                            email.trim().isEmpty() ||
-                            (!isEdit && password.length < 6)
-                        ) {
-                            requiredError = true
-                            return@FilledActionButton
-                        }
-                        isSaving = true
-                        val userId = editingUserId
-                        mutate(
-                            mutation = { token ->
-                                if (userId == null) {
-                                    adminApi.createUser(
-                                        token,
-                                        CreateUserInput(
-                                            name = name.trim(),
-                                            username = username.trim(),
-                                            email = email.trim(),
-                                            password = password,
-                                            role = role,
-                                            active = active
-                                        )
-                                    )
-                                } else {
-                                    adminApi.updateUser(
-                                        token,
-                                        userId,
-                                        UpdateUserInput(
-                                            name = name.trim(),
-                                            username = username.trim(),
-                                            email = email.trim(),
-                                            password = password.takeIf { it.length >= 6 },
-                                            role = role,
-                                            active = active
-                                        )
-                                    )
-                                }
-                            },
-                            successMessageResId = if (userId == null) {
-                                R.string.admin_create_success
-                            } else {
-                                R.string.admin_update_success
-                            },
-                            onSuccess = { clearForm() },
-                            onFinished = { isSaving = false }
-                        )
-                    }
-                )
-            }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 24.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(top = 24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    text = stringResource(R.string.admin_users),
-                    modifier = Modifier.weight(1f),
-                    color = colorResource(R.color.dashboard_text_primary),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = users.size.toString(),
-                    color = colorResource(R.color.dashboard_text_secondary),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.admin_users),
+                        color = colorResource(R.color.dashboard_text_primary),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "$activeCount / ${users.size}",
+                        modifier = Modifier.padding(top = 2.dp),
+                        color = colorResource(R.color.dashboard_text_secondary),
+                        fontSize = 13.sp
+                    )
+                }
+                FilledActionButton(
+                    text = stringResource(R.string.admin_create_user),
+                    colorResId = R.color.login_button,
+                    radius = 8.dp,
+                    modifier = Modifier
+                        .height(40.dp)
+                        .widthIn(min = 120.dp),
+                    onClick = { showCreateDialog = true }
                 )
             }
-            users.forEach { user ->
-                AdminUserRow(
-                    user = user,
-                    canDelete = user.userId != currentUser?.userId,
+
+            CreateTaskInput(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp)
+            )
+
+            if (filteredUsers.isEmpty()) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp)
-                        .clickable { loadUserIntoForm(user) },
-                    onDelete = { userToDelete = user }
-                )
+                        .padding(top = 32.dp)
+                        .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 12.dp)
+                        .padding(horizontal = 20.dp, vertical = 28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = stringResource(R.string.admin_no_users),
+                        color = colorResource(R.color.dashboard_text_primary),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = stringResource(R.string.admin_no_users_hint),
+                        modifier = Modifier.padding(top = 6.dp),
+                        color = colorResource(R.color.dashboard_text_secondary),
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                filteredUsers.forEach { user ->
+                    AdminUserRow(
+                        user = user,
+                        canDelete = user.userId != currentUser?.userId,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp),
+                        onEdit = { userToEdit = user },
+                        onChangePassword = { userToChangePassword = user },
+                        onDelete = { userToDelete = user }
+                    )
+                }
             }
         }
+    }
+
+    if (showCreateDialog) {
+        AdminUserFormDialog(
+            user = null,
+            isSaving = isSaving,
+            onDismiss = { if (!isSaving) showCreateDialog = false },
+            onSave = { name, username, email, password, role, active ->
+                if (isSaving) return@AdminUserFormDialog
+                isSaving = true
+                mutate(
+                    mutation = { token ->
+                        adminApi.createUser(
+                            token,
+                            CreateUserInput(
+                                name = name,
+                                username = username,
+                                email = email,
+                                password = password,
+                                role = role,
+                                active = active
+                            )
+                        )
+                    },
+                    successMessageResId = R.string.admin_create_success,
+                    onSuccess = { showCreateDialog = false },
+                    onFinished = { isSaving = false }
+                )
+            }
+        )
+    }
+
+    userToEdit?.let { user ->
+        AdminUserFormDialog(
+            user = user,
+            isSaving = isSaving,
+            onDismiss = { if (!isSaving) userToEdit = null },
+            onSave = { name, username, email, _, role, active ->
+                if (isSaving) return@AdminUserFormDialog
+                isSaving = true
+                mutate(
+                    mutation = { token ->
+                        adminApi.updateUser(
+                            token,
+                            user.userId,
+                            UpdateUserInput(
+                                name = name,
+                                username = username,
+                                email = email,
+                                role = role,
+                                active = active
+                            )
+                        )
+                    },
+                    successMessageResId = R.string.admin_update_success,
+                    onSuccess = { userToEdit = null },
+                    onFinished = { isSaving = false }
+                )
+            }
+        )
+    }
+
+    userToChangePassword?.let { user ->
+        AdminChangePasswordDialog(
+            userName = user.name,
+            isSaving = isSaving,
+            onDismiss = { if (!isSaving) userToChangePassword = null },
+            onSave = { password ->
+                if (isSaving) return@AdminChangePasswordDialog
+                isSaving = true
+                mutate(
+                    mutation = { token -> adminApi.changePassword(token, user.userId, password) },
+                    successMessageResId = R.string.admin_password_success,
+                    onSuccess = { userToChangePassword = null },
+                    onFinished = { isSaving = false }
+                )
+            }
+        )
     }
 
     userToDelete?.let { user ->
@@ -3124,8 +3055,8 @@ fun AdminScreen() {
                     mutation = { token -> adminApi.deleteUser(token, user.userId) },
                     successMessageResId = R.string.admin_delete_success,
                     onSuccess = {
-                        if (editingUserId == user.userId) {
-                            clearForm()
+                        if (userToEdit?.userId == user.userId) {
+                            userToEdit = null
                         }
                     }
                 )
@@ -3874,17 +3805,21 @@ private fun AdminUserRow(
     user: ApiUser,
     canDelete: Boolean,
     modifier: Modifier = Modifier,
+    onEdit: () -> Unit,
+    onChangePassword: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier
-            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 10.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(38.dp)
+                .size(42.dp)
                 .clip(CircleShape)
                 .background(colorResource(user.roleSoftColorResId())),
             contentAlignment = Alignment.Center
@@ -3897,51 +3832,315 @@ private fun AdminUserRow(
                     .joinToString("") { it.first().uppercase() }
                     .ifBlank { "U" },
                 color = colorResource(user.roleColorResId()),
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold
             )
         }
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp, end = 10.dp)
+                .padding(start = 12.dp, end = 8.dp)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = user.name,
+                    modifier = Modifier.weight(1f, fill = false),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (!user.active) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(colorResource(R.color.settings_logout).copy(alpha = 0.12f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.admin_inactive),
+                            color = colorResource(R.color.settings_logout),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
             Text(
-                text = user.name,
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = user.email,
+                text = "@${user.username}",
                 modifier = Modifier.padding(top = 2.dp),
                 color = colorResource(R.color.dashboard_text_secondary),
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Text(
+                text = user.email,
+                modifier = Modifier.padding(top = 1.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             RoleBadge(user.role, Modifier.padding(top = 7.dp))
-            if (!user.active) {
-                Text(
-                    text = stringResource(R.string.admin_user_inactive),
-                    modifier = Modifier.padding(top = 4.dp),
-                    color = colorResource(R.color.settings_logout),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold
+        }
+        Box {
+            IconButtonLike(
+                iconResId = R.drawable.ic_settings,
+                contentDescription = stringResource(R.string.admin_users),
+                tint = colorResource(R.color.dashboard_text_secondary),
+                modifier = Modifier.size(36.dp),
+                onClick = { menuExpanded = true }
+            )
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+                shape = RoundedCornerShape(12.dp),
+                containerColor = colorResource(R.color.dashboard_card),
+                tonalElevation = 0.dp,
+                shadowElevation = 6.dp,
+                border = BorderStroke(1.dp, colorResource(R.color.dashboard_card_stroke))
+            ) {
+                AppDropdownMenuItem(
+                    text = stringResource(R.string.admin_action_edit),
+                    onClick = {
+                        menuExpanded = false
+                        onEdit()
+                    }
+                )
+                AppDropdownMenuItem(
+                    text = stringResource(R.string.admin_action_password),
+                    onClick = {
+                        menuExpanded = false
+                        onChangePassword()
+                    }
+                )
+                if (canDelete) {
+                    AppDropdownMenuItem(
+                        text = stringResource(R.string.admin_action_delete),
+                        onClick = {
+                            menuExpanded = false
+                            onDelete()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminUserFormDialog(
+    user: ApiUser?,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, username: String, email: String, password: String, role: String, active: Boolean) -> Unit
+) {
+    val isEdit = user != null
+    var name by remember(user?.userId) { mutableStateOf(user?.name.orEmpty()) }
+    var username by remember(user?.userId) { mutableStateOf(user?.username.orEmpty()) }
+    var email by remember(user?.userId) { mutableStateOf(user?.email.orEmpty()) }
+    var password by remember(user?.userId) { mutableStateOf("") }
+    var role by remember(user?.userId) { mutableStateOf(user?.role?.ifBlank { "user" } ?: "user") }
+    var active by remember(user?.userId) { mutableStateOf(user?.active ?: true) }
+    var requiredError by remember(user?.userId) { mutableStateOf(false) }
+
+    val roleUserLabel = stringResource(R.string.admin_role_user)
+    val roleManagerLabel = stringResource(R.string.admin_role_manager)
+    val roleAdminLabel = stringResource(R.string.admin_role_admin)
+    val activeLabel = stringResource(R.string.admin_active)
+    val inactiveLabel = stringResource(R.string.admin_user_inactive)
+
+    AppFormDialog(
+        title = stringResource(if (isEdit) R.string.admin_edit_user else R.string.admin_create_user),
+        subtitle = stringResource(if (isEdit) R.string.admin_edit_subtitle else R.string.admin_create_subtitle),
+        onDismiss = onDismiss,
+        confirmText = stringResource(if (isEdit) R.string.admin_update_user else R.string.admin_save_user),
+        onConfirm = {
+            if (isSaving) return@AppFormDialog
+            if (
+                name.trim().isEmpty() ||
+                username.trim().isEmpty() ||
+                email.trim().isEmpty() ||
+                (!isEdit && password.length < 6)
+            ) {
+                requiredError = true
+                return@AppFormDialog
+            }
+            onSave(name.trim(), username.trim(), email.trim(), password, role, active)
+        }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                CreateTaskLabelNoTop(R.string.admin_name)
+                CreateTaskInput(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        requiredError = false
+                    },
+                    singleLine = true
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                CreateTaskLabelNoTop(R.string.admin_username)
+                CreateTaskInput(
+                    value = username,
+                    onValueChange = {
+                        username = it
+                        requiredError = false
+                    },
+                    singleLine = true
                 )
             }
         }
-        if (canDelete) {
-            FilledActionButton(
-                text = stringResource(R.string.admin_delete_user),
-                colorResId = R.color.settings_logout,
-                radius = 6.dp,
-                modifier = Modifier
-                    .width(86.dp)
-                    .height(36.dp),
-                onClick = onDelete
+        CreateTaskLabel(R.string.admin_email)
+        CreateTaskInput(
+            value = email,
+            onValueChange = {
+                email = it
+                requiredError = false
+            },
+            singleLine = true,
+            keyboardType = KeyboardType.Email
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Column(Modifier.weight(1f)) {
+                CreateTaskLabelNoTop(R.string.admin_role)
+                SelectInput(
+                    selected = roleLabel(role),
+                    values = listOf(roleUserLabel, roleManagerLabel, roleAdminLabel),
+                    onSelected = { selected ->
+                        role = when (selected) {
+                            roleAdminLabel -> "admin"
+                            roleManagerLabel -> "project_manager"
+                            else -> "user"
+                        }
+                    }
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                CreateTaskLabelNoTop(R.string.admin_active)
+                SelectInput(
+                    selected = if (active) activeLabel else inactiveLabel,
+                    values = listOf(activeLabel, inactiveLabel),
+                    onSelected = { selected -> active = selected == activeLabel }
+                )
+            }
+        }
+        if (!isEdit) {
+            CreateTaskLabel(R.string.admin_password)
+            CreateTaskInput(
+                value = password,
+                onValueChange = {
+                    password = it
+                    requiredError = false
+                },
+                singleLine = true,
+                keyboardType = KeyboardType.Password,
+                visualTransformation = PasswordVisualTransformation()
+            )
+        }
+        if (requiredError) {
+            Text(
+                text = stringResource(R.string.admin_required_error),
+                modifier = Modifier.padding(top = 10.dp),
+                color = colorResource(R.color.login_error),
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun AdminChangePasswordDialog(
+    userName: String,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (password: String) -> Unit
+) {
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var requiredError by remember { mutableStateOf(false) }
+    var mismatchError by remember { mutableStateOf(false) }
+
+    AppFormDialog(
+        title = stringResource(R.string.admin_change_password),
+        subtitle = stringResource(R.string.admin_change_password_subtitle),
+        onDismiss = onDismiss,
+        confirmText = stringResource(R.string.admin_change_password),
+        onConfirm = {
+            if (isSaving) return@AppFormDialog
+            if (password.length < 6) {
+                requiredError = true
+                mismatchError = false
+                return@AppFormDialog
+            }
+            if (password != confirmPassword) {
+                mismatchError = true
+                requiredError = false
+                return@AppFormDialog
+            }
+            onSave(password)
+        }
+    ) {
+        Text(
+            text = userName,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(colorResource(R.color.login_input_background))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium
+        )
+        CreateTaskLabel(R.string.admin_new_password)
+        CreateTaskInput(
+            value = password,
+            onValueChange = {
+                password = it
+                requiredError = false
+                mismatchError = false
+            },
+            singleLine = true,
+            keyboardType = KeyboardType.Password,
+            visualTransformation = PasswordVisualTransformation()
+        )
+        CreateTaskLabel(R.string.admin_confirm_password)
+        CreateTaskInput(
+            value = confirmPassword,
+            onValueChange = {
+                confirmPassword = it
+                requiredError = false
+                mismatchError = false
+            },
+            singleLine = true,
+            keyboardType = KeyboardType.Password,
+            visualTransformation = PasswordVisualTransformation()
+        )
+        if (requiredError) {
+            Text(
+                text = stringResource(R.string.admin_required_error),
+                modifier = Modifier.padding(top = 10.dp),
+                color = colorResource(R.color.login_error),
+                fontSize = 12.sp
+            )
+        }
+        if (mismatchError) {
+            Text(
+                text = stringResource(R.string.admin_password_mismatch),
+                modifier = Modifier.padding(top = 10.dp),
+                color = colorResource(R.color.login_error),
+                fontSize = 12.sp
             )
         }
     }

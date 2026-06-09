@@ -29,6 +29,7 @@ func (r *UserRouter) Register(chiRouter chi.Router) {
 	chiRouter.Get("/users/{userId}", r.get)
 	chiRouter.Put("/users/{userId}", r.update)
 	chiRouter.Patch("/users/{userId}", r.update)
+	chiRouter.Patch("/users/{userId}/password", r.changePassword)
 	chiRouter.Delete("/users/{userId}", r.delete)
 	chiRouter.Post("/photos/image", r.uploadPhoto)
 	chiRouter.Handle("/photos/image/*", http.StripPrefix("/photos/image/", http.FileServer(http.Dir(photoUploadDir))))
@@ -178,6 +179,41 @@ func (r *UserRouter) update(w http.ResponseWriter, req *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, user)
+}
+
+func (r *UserRouter) changePassword(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+
+	actor, loggedIn, err := r.AuthService.CheckLogin(req.Context(), authToken(req))
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+	if !loggedIn {
+		writeError(w, http.StatusUnauthorized, "invalid token")
+		return
+	}
+
+	userID, err := strconv.Atoi(chi.URLParam(req, "userId"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "userId is invalid")
+		return
+	}
+
+	var input struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := r.UserService.ChangePassword(req.Context(), actor.UserID, userID, input.Password); err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (r *UserRouter) delete(w http.ResponseWriter, req *http.Request) {

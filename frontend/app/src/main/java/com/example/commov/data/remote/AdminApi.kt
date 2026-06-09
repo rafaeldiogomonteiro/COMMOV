@@ -101,6 +101,34 @@ class AdminApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
+    fun changePassword(token: String, userId: Int, password: String): AdminMutationResult {
+        val connection = authedConnection("/users/$userId/password", token, "PATCH").apply {
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json")
+        }
+
+        return try {
+            val body = JSONObject().put("password", password).toString()
+            connection.outputStream.use { output ->
+                output.write(body.toByteArray(Charsets.UTF_8))
+            }
+
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_NO_CONTENT -> AdminMutationResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> AdminMutationResult.Unauthorized
+                HttpURLConnection.HTTP_FORBIDDEN -> AdminMutationResult.Forbidden
+                else -> AdminMutationResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            AdminMutationResult.NetworkError
+        } catch (_: Exception) {
+            AdminMutationResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     fun deleteUser(token: String, userId: Int): AdminMutationResult {
         val connection = authedConnection("/users/$userId", token, "DELETE")
 

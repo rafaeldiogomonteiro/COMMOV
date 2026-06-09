@@ -377,6 +377,47 @@ func (s *UserService) Update(ctx context.Context, actorUserID int, userID int, i
 	return user, nil
 }
 
+func (s *UserService) ChangePassword(ctx context.Context, actorUserID int, userID int, password string) error {
+	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
+		return err
+	}
+	if userID <= 0 {
+		return validationError("userId is invalid")
+	}
+
+	password = strings.TrimSpace(password)
+	if password == "" {
+		return validationError("password is required")
+	}
+	if len(password) < 6 {
+		return validationError("password must have at least 6 characters")
+	}
+
+	user, err := s.UserRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return notFoundError("user not found")
+		}
+		return fmt.Errorf("get user: %w", err)
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+	user.Password = string(passwordHash)
+
+	if err := s.UserRepo.Update(ctx, user); err != nil {
+		return fmt.Errorf("update user password: %w", err)
+	}
+
+	if s.AuthService != nil {
+		s.AuthService.RevokeUserTokens(user.UserID)
+	}
+
+	return nil
+}
+
 func (s *UserService) Delete(ctx context.Context, actorUserID int, userID int) error {
 	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
 		return err
