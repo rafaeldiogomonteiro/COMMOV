@@ -31,7 +31,8 @@ class ProjectsViewModel(
     private var state = ProjectsUiState(
         projects = emptyList(),
         canCreateTasks = sessionManager.canManageProjects(),
-        requiresLogin = false
+        requiresLogin = false,
+        isLoading = true
     )
 
     fun observe(observer: StateObserver) {
@@ -57,7 +58,7 @@ class ProjectsViewModel(
     private fun refresh() {
         val token = sessionManager.token()
         if (token.isNullOrBlank()) {
-            state = state.copy(requiresLogin = true)
+            state = state.copy(requiresLogin = true, isLoading = false)
             publish()
             return
         }
@@ -79,13 +80,14 @@ class ProjectsViewModel(
                     }
                     ProjectsResult.Unauthorized -> {
                         sessionManager.clear()
-                        state = state.copy(requiresLogin = true)
+                        state = state.copy(requiresLogin = true, isLoading = false)
                     }
                     ProjectsResult.NetworkError,
                     is ProjectsResult.ServerError -> {
-                        state = state.copy(requiresLogin = false)
+                        state = state.copy(requiresLogin = false, isLoading = false)
                     }
                 }
+                state = state.copy(isLoading = false)
                 publish()
             }
         }.start()

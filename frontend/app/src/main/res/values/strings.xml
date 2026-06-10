@@ -1,5 +1,17 @@
 <resources>
-    <string name="app_name">ComMov</string>
+    <string name="app_name">Velotask</string>
+    <string name="intro_skip">Skip</string>
+    <string name="intro_next">Next</string>
+    <string name="intro_get_started">Get started</string>
+    <string name="intro_slide_welcome_title">Welcome to Velotask</string>
+    <string name="intro_slide_welcome_subtitle">Projects, tasks and team work in one place.</string>
+    <string name="intro_slide_projects_title">Manage projects</string>
+    <string name="intro_slide_projects_subtitle">Keep every project organized with clear status, dates and ownership.</string>
+    <string name="intro_slide_tasks_title">Stay on top of tasks</string>
+    <string name="intro_slide_tasks_subtitle">Track progress, priorities and deadlines without losing focus.</string>
+    <string name="intro_slide_team_title">Work as a team</string>
+    <string name="intro_slide_team_subtitle">Collaborate smoothly and keep everyone aligned in one place.</string>
+    <string name="login_reset_intro">Show intro again</string>
     <string name="login_title">Sign in</string>
     <string name="login_subtitle">Use your ComMov account.</string>
     <string name="login_email_label">Email</string>
@@ -232,8 +244,8 @@
     <string name="admin_action_password">Password</string>
     <string name="admin_action_export">Export</string>
     <string name="admin_action_delete">Delete</string>
-    <string name="admin_export_success">Report downloaded.</string>
-    <string name="admin_export_no_viewer">Report saved, but no PDF viewer was found.</string>
+    <string name="admin_export_success">Report saved to Downloads.</string>
+    <string name="admin_export_no_viewer">Report saved to Downloads, but could not open it.</string>
     <string name="admin_inactive">Inactive</string>
     <string name="content_email_icon">Email</string>
     <string name="content_password_icon">Password</string>

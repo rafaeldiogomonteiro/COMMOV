@@ -7,6 +7,7 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="velotask_blue">#3B7BEB</color>
     <color name="login_background">#F7F8FC</color>
     <color name="login_card">#FFFFFFFF</color>
     <color name="login_card_stroke">#C8D0E3</color>
@@ -24,6 +25,8 @@
     <color name="dashboard_text_primary">#20232B</color>
     <color name="dashboard_text_secondary">#4C5567</color>
     <color name="dashboard_muted">#DDE1EB</color>
+    <color name="skeleton_base">#E4E8EF</color>
+    <color name="skeleton_highlight">#F4F6FA</color>
     <color name="task_red">#D82020</color>
     <color name="task_red_soft">#FFE0E0</color>
     <color name="task_orange">#F6A000</color>

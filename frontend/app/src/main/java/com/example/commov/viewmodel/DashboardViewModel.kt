@@ -36,7 +36,7 @@ class DashboardViewModel(
     private fun refreshSession() {
         val token = sessionManager.token()
         if (token.isNullOrBlank()) {
-            state = state.copy(requiresLogin = true)
+            state = state.copy(requiresLogin = true, isLoading = false)
             publish(state)
             return
         }
@@ -56,12 +56,12 @@ class DashboardViewModel(
                     }
                     CheckLoginResult.LoggedOut -> {
                         sessionManager.clear()
-                        state = state.copy(requiresLogin = true)
+                        state = state.copy(requiresLogin = true, isLoading = false)
                         publish(state)
                     }
                     CheckLoginResult.NetworkError,
                     is CheckLoginResult.ServerError -> {
-                        state = state.copy(requiresLogin = false)
+                        state = state.copy(requiresLogin = false, isLoading = false)
                         publish(state)
                     }
                 }
@@ -90,13 +90,14 @@ class DashboardViewModel(
                     }
                     DashboardResult.Unauthorized -> {
                         sessionManager.clear()
-                        state = state.copy(requiresLogin = true)
+                        state = state.copy(requiresLogin = true, isLoading = false)
                     }
                     DashboardResult.NetworkError,
                     is DashboardResult.ServerError -> {
-                        state = state.copy(requiresLogin = false)
+                        state = state.copy(requiresLogin = false, isLoading = false)
                     }
                 }
+                state = state.copy(isLoading = false)
                 publish(state)
             }
         }.start()
@@ -114,7 +115,8 @@ class DashboardViewModel(
             pendingProgress = 0,
             completedProgress = 0,
             tasks = emptyList(),
-            requiresLogin = false
+            requiresLogin = false,
+            isLoading = true
         )
     }
 

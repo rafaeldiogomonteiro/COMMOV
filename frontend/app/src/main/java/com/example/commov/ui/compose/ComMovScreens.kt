@@ -9,6 +9,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.content.ContextWrapper
 import android.content.Intent
+import android.net.Uri
+import android.os.Environment
+import android.provider.MediaStore
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -82,6 +85,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.FileProvider
+import android.content.ContentValues
 import java.io.File
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -93,7 +97,9 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.commov.MainActivity
 import com.example.commov.R
+import com.example.commov.data.local.LanguageFlagStore
 import com.example.commov.data.local.LocaleHelper
+import com.example.commov.data.local.OnboardingStore
 import com.example.commov.data.local.PendingProfilePhotoStore
 import com.example.commov.data.local.ProfilePhotoImageReader
 import com.example.commov.data.local.SessionManager
@@ -133,11 +139,11 @@ import com.example.commov.model.ProjectMember
 import com.example.commov.model.ProjectTask
 import com.example.commov.ui.admin.AdminActivity
 import com.example.commov.ui.dashboard.DashboardActivity
+import com.example.commov.ui.intro.IntroActivity
 import com.example.commov.ui.projects.CreateProjectActivity
 import com.example.commov.ui.projects.CreateTaskActivity
 import com.example.commov.ui.projects.ProjectsActivity
 import com.example.commov.ui.projects.TaskDetailActivity
-import com.example.commov.ui.auth.RegisterActivity
 import com.example.commov.ui.settings.SettingsActivity
 import com.example.commov.viewmodel.DashboardUiState
 import com.example.commov.viewmodel.DashboardViewModel
@@ -162,6 +168,7 @@ fun LoginScreen() {
     val activity = context.findActivity()
     val viewModel = remember { LoginViewModel(context.applicationContext) }
     val pendingPhotoStore = remember { PendingProfilePhotoStore(context.applicationContext) }
+    val onboardingStore = remember { OnboardingStore(context.applicationContext) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     var state by remember { mutableStateOf(LoginUiState("", "", false, 0, 0, 0, false, false)) }
     var isSavingPhoto by remember { mutableStateOf(false) }
@@ -243,7 +250,9 @@ fun LoginScreen() {
         Column(
             modifier = Modifier
                 .padding(horizontal = 20.dp)
+                .widthIn(max = 520.dp)
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .cardBackground(R.color.login_card, R.color.login_card_stroke, 8.dp)
                 .padding(start = 24.dp, top = 28.dp, end = 24.dp, bottom = 28.dp)
         ) {
@@ -352,28 +361,25 @@ fun LoginScreen() {
                 enabled = !isSavingPhoto && !state.isLoading,
                 onClick = { offlinePhotoPickerLauncher.launch(arrayOf("image/*")) }
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.login_no_account),
-                    color = colorResource(R.color.login_text_secondary),
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = stringResource(R.string.login_create_account_link),
-                    color = colorResource(R.color.login_link),
-                    fontSize = 14.sp,
-                    modifier = Modifier.clickable {
-                        activity.startActivity(Intent(activity, RegisterActivity::class.java))
-                    }
-                )
-            }
         }
+
+        Text(
+            text = stringResource(R.string.login_reset_intro),
+            color = colorResource(R.color.login_text_secondary).copy(alpha = 0.55f),
+            fontSize = 11.sp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 12.dp)
+                .clickable {
+                    Thread {
+                        onboardingStore.resetIntro()
+                        mainHandler.post {
+                            activity.startActivity(Intent(activity, IntroActivity::class.java))
+                            activity.finish()
+                        }
+                    }.start()
+                }
+        )
     }
 }
 
@@ -418,10 +424,11 @@ fun RegisterScreen() {
         Column(
             modifier = Modifier
                 .padding(horizontal = 20.dp)
+                .widthIn(max = 520.dp)
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .cardBackground(R.color.login_card, R.color.login_card_stroke, 8.dp)
                 .padding(start = 24.dp, top = 28.dp, end = 24.dp, bottom = 28.dp)
-                .verticalScroll(rememberScrollState())
         ) {
             Text(
                 text = stringResource(R.string.register_title),
@@ -713,7 +720,8 @@ fun DashboardScreen() {
                 pendingProgress = 0,
                 completedProgress = 0,
                 tasks = emptyList(),
-                requiresLogin = false
+                requiresLogin = false,
+                isLoading = true
             )
         )
     }
@@ -737,6 +745,14 @@ fun DashboardScreen() {
     }
 
     AppScaffold(selectedDestination = Destination.HOME) {
+        if (state.isLoading) {
+            DashboardScreenSkeleton(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .screenContentPadding()
+            )
+        } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -840,6 +856,7 @@ fun DashboardScreen() {
                 }
             }
         }
+        }
     }
 }
 
@@ -857,7 +874,8 @@ fun ProjectsScreen() {
             ProjectsUiState(
                 projects = emptyList(),
                 canCreateTasks = false,
-                requiresLogin = false
+                requiresLogin = false,
+                isLoading = true
             )
         )
     }
@@ -923,6 +941,14 @@ fun ProjectsScreen() {
     }
 
     AppScaffold(selectedDestination = Destination.PROJECTS) {
+        if (state.isLoading) {
+            ProjectsScreenSkeleton(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .screenContentPadding()
+            )
+        } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1053,6 +1079,7 @@ fun ProjectsScreen() {
                     )
                 }
             }
+        }
         }
     }
 
@@ -2247,7 +2274,9 @@ fun CreateProjectScreen() {
                 subtitle = stringResource(R.string.create_project_subtitle),
                 onBack = { activity.finish() }
             )
-
+            if (!usersLoaded) {
+                CreateFormScreenSkeleton()
+            } else {
             FormSection(R.string.create_project_section_details) {
                 CreateTaskLabelNoTop(R.string.create_project_name)
                 CreateTaskInput(
@@ -2409,6 +2438,7 @@ fun CreateProjectScreen() {
                     }.start()
                 }
             )
+            }
         }
     }
 }
@@ -2500,7 +2530,9 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                 subtitle = stringResource(R.string.create_task_subtitle, resolvedProjectName),
                 onBack = { activity.finish() }
             )
-
+            if (!assigneesLoaded) {
+                CreateFormScreenSkeleton()
+            } else {
             FormSection(R.string.create_task_section_details) {
                 CreateTaskLabelNoTop(R.string.create_task_task_title)
                 CreateTaskInput(
@@ -2660,6 +2692,7 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                     }.start()
                 }
             )
+            }
         }
     }
 }
@@ -2683,6 +2716,7 @@ fun TaskDetailScreen(taskId: Int) {
     var showCompleteTaskConfirm by remember { mutableStateOf(false) }
     var assigneePickerUsers by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
     var isSaving by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
 
     fun authFailure() {
         sessionManager.clear()
@@ -2719,6 +2753,7 @@ fun TaskDetailScreen(taskId: Int) {
                 when (result) {
                     is TaskResult.Success -> {
                         task = result.task
+                        isLoading = false
                         loadTimeEntries()
                         Thread {
                             val membersResult = projectsApi.projectUsers(token, result.task.projectId)
@@ -2736,7 +2771,10 @@ fun TaskDetailScreen(taskId: Int) {
                     }
                     TaskResult.Unauthorized -> authFailure()
                     TaskResult.NetworkError,
-                    is TaskResult.ServerError -> Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                    is TaskResult.ServerError -> {
+                        isLoading = false
+                        Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }.start()
@@ -2878,10 +2916,12 @@ fun TaskDetailScreen(taskId: Int) {
         SubPageContent {
             PageTopBar(
                 title = task?.title ?: stringResource(R.string.task_detail_title),
-                subtitle = taskStatusLabel(task?.status),
+                subtitle = if (isLoading) "" else taskStatusLabel(task?.status),
                 onBack = { activity.finish() }
             )
-
+            if (isLoading) {
+                TaskDetailScreenSkeleton()
+            } else {
             StatusPill(
                 status = task?.status ?: "pending",
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -2995,6 +3035,7 @@ fun TaskDetailScreen(taskId: Int) {
                     }
                 )
             }
+            }
         }
     }
 }
@@ -3008,13 +3049,13 @@ fun AdminScreen() {
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val currentUser = remember { sessionManager.currentUser() }
     var users by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
-    var searchQuery by remember { mutableStateOf("") }
     var showCreateDialog by remember { mutableStateOf(false) }
     var userToEdit by remember { mutableStateOf<ApiUser?>(null) }
     var userToChangePassword by remember { mutableStateOf<ApiUser?>(null) }
     var userToDelete by remember { mutableStateOf<ApiUser?>(null) }
     var isSaving by remember { mutableStateOf(false) }
     var isExporting by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
 
     fun handleAuthFailure() {
         sessionManager.clear()
@@ -3032,6 +3073,7 @@ fun AdminScreen() {
         Thread {
             val result = adminApi.users(token)
             mainHandler.post {
+                isLoading = false
                 when (result) {
                     is AdminUsersResult.Success -> users = result.users
                     AdminUsersResult.Unauthorized -> handleAuthFailure()
@@ -3096,12 +3138,17 @@ fun AdminScreen() {
             mainHandler.post {
                 when (result) {
                     is AdminExportResult.Success -> {
-                        val opened = openExportedPdf(context, result.bytes, result.filename)
-                        Toast.makeText(
-                            context,
-                            if (opened) R.string.admin_export_success else R.string.admin_export_no_viewer,
-                            Toast.LENGTH_LONG
-                        ).show()
+                        val uri = savePdfToDownloads(context, result.bytes, result.filename)
+                        if (uri == null) {
+                            Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
+                        } else {
+                            val opened = openExportedPdf(context, uri)
+                            Toast.makeText(
+                                context,
+                                if (opened) R.string.admin_export_success else R.string.admin_export_no_viewer,
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
                     }
                     AdminExportResult.Unauthorized -> handleAuthFailure()
                     AdminExportResult.Forbidden -> Toast.makeText(context, R.string.admin_forbidden, Toast.LENGTH_LONG).show()
@@ -3126,18 +3173,16 @@ fun AdminScreen() {
     val adminCount = users.count { it.role == "admin" }
     val managerCount = users.count { it.role == "project_manager" }
     val activeCount = users.count { it.active }
-    val filteredUsers = users.filter { user ->
-        if (searchQuery.isBlank()) {
-            true
-        } else {
-            val query = searchQuery.trim().lowercase()
-            user.name.lowercase().contains(query) ||
-                user.username.lowercase().contains(query) ||
-                user.email.lowercase().contains(query)
-        }
-    }
 
     AppScaffold(selectedDestination = Destination.ADMIN) {
+        if (isLoading) {
+            AdminScreenSkeleton(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .screenContentPadding(bottom = 24.dp)
+            )
+        } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -3205,16 +3250,7 @@ fun AdminScreen() {
                 )
             }
 
-            CreateTaskInput(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 14.dp)
-            )
-
-            if (filteredUsers.isEmpty()) {
+            if (users.isEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3239,7 +3275,7 @@ fun AdminScreen() {
                     )
                 }
             } else {
-                filteredUsers.forEach { user ->
+                users.forEach { user ->
                     AdminUserRow(
                         user = user,
                         canDelete = user.userId != currentUser?.userId,
@@ -3253,6 +3289,7 @@ fun AdminScreen() {
                     )
                 }
             }
+        }
         }
     }
 
@@ -3367,6 +3404,7 @@ fun SettingsScreen() {
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     var currentUser by remember { mutableStateOf(sessionManager.currentUser()) }
     var isUploadingPhoto by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
     var language by remember { mutableStateOf(viewModel.getState(context).language) }
     val englishSelected = LocaleHelper.LANGUAGE_ENGLISH == language
     val currentLanguageName = stringResource(
@@ -3390,6 +3428,7 @@ fun SettingsScreen() {
     }
     LaunchedEffect(Unit) {
         currentUser = sessionManager.currentUser()
+        isLoading = false
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -3455,6 +3494,14 @@ fun SettingsScreen() {
     }
 
     AppScaffold(selectedDestination = Destination.SETTINGS) {
+        if (isLoading) {
+            SettingsScreenSkeleton(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .screenContentPadding(bottom = 24.dp)
+            )
+        } else {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -3593,6 +3640,7 @@ fun SettingsScreen() {
                 ) {
                     LanguageButton(
                         text = stringResource(R.string.language_english),
+                        language = LocaleHelper.LANGUAGE_ENGLISH,
                         selected = englishSelected,
                         modifier = Modifier.weight(1f),
                         onClick = {
@@ -3605,6 +3653,7 @@ fun SettingsScreen() {
                     )
                     LanguageButton(
                         text = stringResource(R.string.language_portuguese),
+                        language = LocaleHelper.LANGUAGE_PORTUGUESE,
                         selected = !englishSelected,
                         modifier = Modifier.weight(1f),
                         onClick = {
@@ -3653,6 +3702,7 @@ fun SettingsScreen() {
                     }
                 )
             }
+        }
         }
     }
 }
@@ -3758,12 +3808,41 @@ private fun BottomNavigationItem(
 }
 
 @Composable
+private fun LanguageFlagIcon(
+    language: String,
+    modifier: Modifier = Modifier,
+    size: Dp = 18.dp
+) {
+    val context = LocalContext.current
+    var flagUrl by remember(language) { mutableStateOf(LanguageFlagStore.getFlagUrl(language)) }
+
+    LaunchedEffect(language) {
+        flagUrl = LanguageFlagStore.refreshFlags()[language] ?: flagUrl
+    }
+
+    flagUrl?.let { url ->
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(url)
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            modifier = modifier
+                .size(size)
+                .clip(RoundedCornerShape(2.dp)),
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+@Composable
 private fun LanguageSelector(
     modifier: Modifier = Modifier,
     onLanguageSelected: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val languageCode = if (LocaleHelper.getSavedLanguage(context) == LocaleHelper.LANGUAGE_ENGLISH) {
+    val currentLanguage = LocaleHelper.getSavedLanguage(context)
+    val languageCode = if (currentLanguage == LocaleHelper.LANGUAGE_ENGLISH) {
         "EN"
     } else {
         "PT"
@@ -3777,6 +3856,11 @@ private fun LanguageSelector(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Image(painterResource(R.drawable.ic_globe), contentDescription = null, modifier = Modifier.size(18.dp))
+            LanguageFlagIcon(
+                language = currentLanguage,
+                modifier = Modifier.padding(start = 4.dp),
+                size = 16.dp
+            )
             Text(
                 text = languageCode,
                 modifier = Modifier.padding(start = 4.dp),
@@ -3804,6 +3888,9 @@ private fun LanguageSelector(
         ) {
             AppDropdownMenuItem(
                 text = stringResource(R.string.language_english),
+                leadingContent = {
+                    LanguageFlagIcon(language = LocaleHelper.LANGUAGE_ENGLISH, size = 20.dp)
+                },
                 onClick = {
                     expanded = false
                     onLanguageSelected(LocaleHelper.LANGUAGE_ENGLISH)
@@ -3811,6 +3898,9 @@ private fun LanguageSelector(
             )
             AppDropdownMenuItem(
                 text = stringResource(R.string.language_portuguese),
+                leadingContent = {
+                    LanguageFlagIcon(language = LocaleHelper.LANGUAGE_PORTUGUESE, size = 20.dp)
+                },
                 onClick = {
                     expanded = false
                     onLanguageSelected(LocaleHelper.LANGUAGE_PORTUGUESE)
@@ -4229,20 +4319,92 @@ private fun SelectableMemberRow(
     }
 }
 
-private fun openExportedPdf(context: Context, bytes: ByteArray, filename: String): Boolean {
-    val exportsDir = File(context.cacheDir, "exports").apply { mkdirs() }
+private fun savePdfToDownloads(context: Context, bytes: ByteArray, filename: String): Uri? {
     val safeName = filename.replace(Regex("[^A-Za-z0-9._-]"), "_")
-    val file = File(exportsDir, safeName)
-    file.writeBytes(bytes)
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        savePdfToDownloadsMediaStore(context, bytes, safeName)
+    } else {
+        savePdfToDownloadsLegacy(context, bytes, safeName)
+    }
+}
 
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val intent = Intent(Intent.ACTION_VIEW).apply {
+private fun savePdfToDownloadsMediaStore(context: Context, bytes: ByteArray, safeName: String): Uri? {
+    val resolver = context.contentResolver
+    val collection = MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    val pending = ContentValues().apply {
+        put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+        put(MediaStore.Downloads.MIME_TYPE, "application/pdf")
+        put(MediaStore.Downloads.IS_PENDING, 1)
+    }
+    val uri = resolver.insert(collection, pending) ?: return null
+    return try {
+        resolver.openOutputStream(uri)?.use { it.write(bytes) }
+            ?: return null
+        val published = ContentValues().apply {
+            put(MediaStore.Downloads.IS_PENDING, 0)
+        }
+        resolver.update(uri, published, null, null)
+        uri
+    } catch (_: Exception) {
+        resolver.delete(uri, null, null)
+        null
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun savePdfToDownloadsLegacy(context: Context, bytes: ByteArray, safeName: String): Uri? {
+    return try {
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        downloadsDir.mkdirs()
+        val file = File(downloadsDir, safeName)
+        file.writeBytes(bytes)
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun openExportedPdf(context: Context, uri: Uri): Boolean {
+    val viewFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+    val pdfIntent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(uri, "application/pdf")
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        addFlags(viewFlags)
+    }
+    if (pdfIntent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(pdfIntent)
+        return true
+    }
+    return openPdfInBrowser(context, uri)
+}
+
+private fun openPdfInBrowser(context: Context, uri: Uri): Boolean {
+    val viewFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+    val browserPackages = context.packageManager
+        .queryIntentActivities(
+            Intent(Intent.ACTION_VIEW, Uri.parse("https://")),
+            PackageManager.MATCH_DEFAULT_ONLY
+        )
+        .mapNotNull { it.activityInfo?.packageName }
+        .distinct()
+
+    for (packageName in browserPackages) {
+        val browserIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/pdf")
+            setPackage(packageName)
+            addFlags(viewFlags)
+        }
+        if (browserIntent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(browserIntent)
+            return true
+        }
     }
 
-    return if (intent.resolveActivity(context.packageManager) != null) {
-        context.startActivity(intent)
+    val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+        setData(uri)
+        addFlags(viewFlags)
+    }
+    return if (fallbackIntent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(Intent.createChooser(fallbackIntent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         true
     } else {
         false
@@ -5081,15 +5243,30 @@ private fun EditProjectDialog(
 @Composable
 private fun AppDropdownMenuItem(
     text: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    leadingContent: (@Composable () -> Unit)? = null
 ) {
     DropdownMenuItem(
         text = {
-            Text(
-                text = text,
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 15.sp
-            )
+            if (leadingContent == null) {
+                Text(
+                    text = text,
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 15.sp
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    leadingContent()
+                    Text(
+                        text = text,
+                        color = colorResource(R.color.dashboard_text_primary),
+                        fontSize = 15.sp
+                    )
+                }
+            }
         },
         onClick = onClick,
         colors = MenuDefaults.itemColors(
@@ -5346,6 +5523,7 @@ private fun SettingsPanel(
 @Composable
 private fun LanguageButton(
     text: String,
+    language: String,
     selected: Boolean,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
@@ -5362,7 +5540,13 @@ private fun LanguageButton(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(text = text, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            LanguageFlagIcon(language = language, size = 20.dp)
+            Text(text = text, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
     }
 }
 

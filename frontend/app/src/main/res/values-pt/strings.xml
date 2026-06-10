@@ -1,5 +1,17 @@
 <resources>
-    <string name="app_name">ComMov</string>
+    <string name="app_name">Velotask</string>
+    <string name="intro_skip">Saltar</string>
+    <string name="intro_next">Seguinte</string>
+    <string name="intro_get_started">Começar</string>
+    <string name="intro_slide_welcome_title">Bem-vindo ao Velotask</string>
+    <string name="intro_slide_welcome_subtitle">Projetos, tarefas e equipa num só sítio.</string>
+    <string name="intro_slide_projects_title">Gere projetos</string>
+    <string name="intro_slide_projects_subtitle">Mantém cada projeto organizado com estado, datas e responsáveis claros.</string>
+    <string name="intro_slide_tasks_title">Domina as tarefas</string>
+    <string name="intro_slide_tasks_subtitle">Acompanha progresso, prioridades e prazos sem perder o foco.</string>
+    <string name="intro_slide_team_title">Trabalha em equipa</string>
+    <string name="intro_slide_team_subtitle">Colabora com fluidez e mantém todos alinhados num só sítio.</string>
+    <string name="login_reset_intro">Ver intro outra vez</string>
     <string name="login_title">Iniciar sessão</string>
     <string name="login_subtitle">Use a sua conta ComMov.</string>
     <string name="login_email_label">Email</string>
@@ -232,8 +244,8 @@
     <string name="admin_action_password">Palavra-passe</string>
     <string name="admin_action_export">Exportar</string>
     <string name="admin_action_delete">Eliminar</string>
-    <string name="admin_export_success">Relatório transferido.</string>
-    <string name="admin_export_no_viewer">Relatório guardado, mas não foi encontrada uma app para abrir PDF.</string>
+    <string name="admin_export_success">Relatório guardado em Transferências.</string>
+    <string name="admin_export_no_viewer">Relatório guardado em Transferências, mas não foi possível abrir.</string>
     <string name="admin_inactive">Inativo</string>
     <string name="content_email_icon">Email</string>
     <string name="content_password_icon">Palavra-passe</string>

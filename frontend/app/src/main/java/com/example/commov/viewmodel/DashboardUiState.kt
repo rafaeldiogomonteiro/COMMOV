@@ -9,5 +9,6 @@ data class DashboardUiState(
     val pendingProgress: Int,
     val completedProgress: Int,
     val tasks: List<DashboardTask>,
-    val requiresLogin: Boolean
+    val requiresLogin: Boolean,
+    val isLoading: Boolean = true
 )
