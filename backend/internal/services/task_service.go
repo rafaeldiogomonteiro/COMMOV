@@ -19,7 +19,7 @@ const (
 
 type TaskCreateInput struct {
 	ProjectID        int
-	UserID           int
+	UserIDs          []int
 	Title            string
 	Description      string
 	EstimatedEndDate *time.Time
@@ -29,7 +29,6 @@ type TaskCreateInput struct {
 
 type TaskUpdateInput struct {
 	ProjectID        *int
-	UserID           *int
 	Title            *string
 	Description      *string
 	Status           *string
@@ -60,11 +59,12 @@ type TaskAddTimeSpentInput struct {
 }
 
 type TaskService struct {
-	TaskRepo           *postgres.TaskRepo
-	TaskTimeEntryRepo  *postgres.TaskTimeEntryRepo
-	ProjectRepo        *postgres.ProjectRepo
-	ProjectUserRepo    *postgres.ProjectUserRepo
-	UserRepo           *postgres.UserRepo
+	TaskRepo          *postgres.TaskRepo
+	TaskUserRepo      *postgres.TaskUserRepo
+	TaskTimeEntryRepo *postgres.TaskTimeEntryRepo
+	ProjectRepo       *postgres.ProjectRepo
+	ProjectUserRepo   *postgres.ProjectUserRepo
+	UserRepo          *postgres.UserRepo
 }
 
 func (s *TaskService) List(ctx context.Context, actorUserID int) ([]entity.Task, error) {
@@ -78,6 +78,9 @@ func (s *TaskService) List(ctx context.Context, actorUserID int) ([]entity.Task,
 		if err != nil {
 			return nil, fmt.Errorf("list tasks: %w", err)
 		}
+		if err := s.populateTaskUserIDs(ctx, tasks); err != nil {
+			return nil, err
+		}
 
 		return tasks, nil
 	}
@@ -85,6 +88,9 @@ func (s *TaskService) List(ctx context.Context, actorUserID int) ([]entity.Task,
 	tasks, err := s.TaskRepo.ListByUserID(ctx, actor.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("list user tasks: %w", err)
+	}
+	if err := s.populateTaskUserIDs(ctx, tasks); err != nil {
+		return nil, err
 	}
 
 	return tasks, nil
@@ -104,6 +110,9 @@ func (s *TaskService) ListByProject(ctx context.Context, actorUserID int, projec
 		if err != nil {
 			return nil, fmt.Errorf("list project tasks: %w", err)
 		}
+		if err := s.populateTaskUserIDs(ctx, tasks); err != nil {
+			return nil, err
+		}
 
 		return tasks, nil
 	}
@@ -120,6 +129,9 @@ func (s *TaskService) ListByProject(ctx context.Context, actorUserID int, projec
 	if err != nil {
 		return nil, fmt.Errorf("list user project tasks: %w", err)
 	}
+	if err := s.populateTaskUserIDs(ctx, tasks); err != nil {
+		return nil, err
+	}
 
 	return tasks, nil
 }
@@ -135,6 +147,9 @@ func (s *TaskService) Get(ctx context.Context, actorUserID int, taskID int) (*en
 		return nil, err
 	}
 	if err := s.ensureTaskAccess(ctx, actor, task); err != nil {
+		return nil, err
+	}
+	if err := s.populateTask(ctx, task); err != nil {
 		return nil, err
 	}
 
@@ -171,8 +186,14 @@ func (s *TaskService) Create(ctx context.Context, actorUserID int, input TaskCre
 	if err != nil {
 		return nil, err
 	}
-	if _, err := s.getActiveUser(ctx, input.UserID, "userId"); err != nil {
-		return nil, err
+	userIDs := uniquePositiveIDs(input.UserIDs)
+	if len(userIDs) == 0 {
+		return nil, validationError("userIds is required")
+	}
+	for _, userID := range userIDs {
+		if _, err := s.getActiveUser(ctx, userID, "userId"); err != nil {
+			return nil, err
+		}
 	}
 
 	title, description, status, location, observation, photo, err := normalizeTaskText(
@@ -195,7 +216,6 @@ func (s *TaskService) Create(ctx context.Context, actorUserID int, input TaskCre
 
 	task := &entity.Task{
 		ProjectID:        input.ProjectID,
-		UserID:           input.UserID,
 		Title:            title,
 		Description:      description,
 		Status:           status,
@@ -206,12 +226,18 @@ func (s *TaskService) Create(ctx context.Context, actorUserID int, input TaskCre
 		Photo:            photo,
 	}
 
-	if err := s.ensureProjectMember(ctx, task.ProjectID, task.UserID); err != nil {
-		return nil, err
+	for _, userID := range userIDs {
+		if err := s.ensureProjectMember(ctx, task.ProjectID, userID); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.TaskRepo.Create(ctx, task); err != nil {
 		return nil, fmt.Errorf("create task: %w", err)
 	}
+	if err := s.TaskUserRepo.ReplaceForTask(ctx, task.TaskID, userIDs); err != nil {
+		return nil, fmt.Errorf("assign task users: %w", err)
+	}
+	task.UserIDs = userIDs
 
 	return task, nil
 }
@@ -231,12 +257,6 @@ func (s *TaskService) Update(ctx context.Context, actorUserID int, taskID int, i
 			return nil, err
 		}
 		task.ProjectID = *input.ProjectID
-	}
-	if input.UserID != nil {
-		if _, err := s.getActiveUser(ctx, *input.UserID, "userId"); err != nil {
-			return nil, err
-		}
-		task.UserID = *input.UserID
 	}
 	if input.Title != nil {
 		title := strings.TrimSpace(*input.Title)
@@ -320,14 +340,88 @@ func (s *TaskService) Update(ctx context.Context, actorUserID int, taskID int, i
 		return nil, err
 	}
 
-	if err := s.ensureProjectMember(ctx, task.ProjectID, task.UserID); err != nil {
-		return nil, err
-	}
 	if err := s.TaskRepo.Update(ctx, task); err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
 	}
+	if err := s.populateTask(ctx, task); err != nil {
+		return nil, err
+	}
 
 	return task, nil
+}
+
+func (s *TaskService) AddAssignee(ctx context.Context, actorUserID int, taskID int, userID int) (*entity.Task, error) {
+	if _, err := actorWithManagementRole(ctx, s.UserRepo, actorUserID); err != nil {
+		return nil, err
+	}
+
+	task, err := s.getTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.getActiveUser(ctx, userID, "userId"); err != nil {
+		return nil, err
+	}
+
+	exists, err := s.TaskUserRepo.ExistsByTaskAndUser(ctx, taskID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("check task assignee: %w", err)
+	}
+	if exists {
+		return nil, validationError("user is already assigned to this task")
+	}
+
+	if err := s.ensureProjectMember(ctx, task.ProjectID, userID); err != nil {
+		return nil, err
+	}
+	if err := s.TaskUserRepo.Create(ctx, &entity.TaskUser{
+		TaskID: taskID,
+		UserID: userID,
+	}); err != nil {
+		return nil, fmt.Errorf("add task assignee: %w", err)
+	}
+	if err := s.populateTask(ctx, task); err != nil {
+		return nil, err
+	}
+
+	return task, nil
+}
+
+func (s *TaskService) RemoveAssignee(ctx context.Context, actorUserID int, taskID int, userID int) error {
+	if _, err := actorWithManagementRole(ctx, s.UserRepo, actorUserID); err != nil {
+		return err
+	}
+
+	task, err := s.getTask(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if userID <= 0 {
+		return validationError("userId is invalid")
+	}
+
+	count, err := s.TaskUserRepo.CountByTaskID(ctx, taskID)
+	if err != nil {
+		return fmt.Errorf("count task assignees: %w", err)
+	}
+	if count <= 1 {
+		return validationError("task must have at least one assignee")
+	}
+
+	exists, err := s.TaskUserRepo.ExistsByTaskAndUser(ctx, taskID, userID)
+	if err != nil {
+		return fmt.Errorf("check task assignee: %w", err)
+	}
+	if !exists {
+		return notFoundError("assignee not found for this task")
+	}
+
+	if err := s.TaskUserRepo.DeleteByTaskAndUser(ctx, taskID, userID); err != nil {
+		return fmt.Errorf("remove task assignee: %w", err)
+	}
+
+	_ = task
+	return nil
 }
 
 func (s *TaskService) Delete(ctx context.Context, actorUserID int, taskID int) error {
@@ -408,8 +502,33 @@ func (s *TaskService) AddTimeSpent(ctx context.Context, actorUserID int, taskID 
 	if err := s.TaskRepo.Update(ctx, task); err != nil {
 		return nil, fmt.Errorf("add task time spent: %w", err)
 	}
+	if err := s.populateTask(ctx, task); err != nil {
+		return nil, err
+	}
 
 	return task, nil
+}
+
+func (s *TaskService) populateTask(ctx context.Context, task *entity.Task) error {
+	userIDs, err := s.TaskUserRepo.ListUserIDsByTaskID(ctx, task.TaskID)
+	if err != nil {
+		return fmt.Errorf("list task users: %w", err)
+	}
+	task.UserIDs = userIDs
+
+	return nil
+}
+
+func (s *TaskService) populateTaskUserIDs(ctx context.Context, tasks []entity.Task) error {
+	for index := range tasks {
+		userIDs, err := s.TaskUserRepo.ListUserIDsByTaskID(ctx, tasks[index].TaskID)
+		if err != nil {
+			return fmt.Errorf("list task users: %w", err)
+		}
+		tasks[index].UserIDs = userIDs
+	}
+
+	return nil
 }
 
 func (s *TaskService) Complete(ctx context.Context, actorUserID int, taskID int, input TaskCompleteInput) (*entity.Task, error) {
@@ -422,8 +541,14 @@ func (s *TaskService) Complete(ctx context.Context, actorUserID int, taskID int,
 	if err != nil {
 		return nil, err
 	}
-	if !hasManagementRole(actor) && task.UserID != actor.UserID {
-		return nil, fmt.Errorf("%w: task is not assigned to this user", ErrForbidden)
+	if !hasManagementRole(actor) {
+		isAssignee, err := s.TaskUserRepo.ExistsByTaskAndUser(ctx, task.TaskID, actor.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("check task assignee: %w", err)
+		}
+		if !isAssignee {
+			return nil, fmt.Errorf("%w: task is not assigned to this user", ErrForbidden)
+		}
 	}
 
 	if input.TimeSpent != nil {
@@ -468,6 +593,9 @@ func (s *TaskService) Complete(ctx context.Context, actorUserID int, taskID int,
 
 	if err := s.TaskRepo.Update(ctx, task); err != nil {
 		return nil, fmt.Errorf("complete task: %w", err)
+	}
+	if err := s.populateTask(ctx, task); err != nil {
+		return nil, err
 	}
 
 	return task, nil
@@ -525,7 +653,15 @@ func (s *TaskService) getActiveUser(ctx context.Context, userID int, fieldName s
 }
 
 func (s *TaskService) ensureTaskAccess(ctx context.Context, actor *entity.User, task *entity.Task) error {
-	if hasManagementRole(actor) || task.UserID == actor.UserID {
+	if hasManagementRole(actor) {
+		return nil
+	}
+
+	isAssignee, err := s.TaskUserRepo.ExistsByTaskAndUser(ctx, task.TaskID, actor.UserID)
+	if err != nil {
+		return fmt.Errorf("check task assignee: %w", err)
+	}
+	if isAssignee {
 		return nil
 	}
 

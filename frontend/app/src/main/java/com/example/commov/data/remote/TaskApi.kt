@@ -90,10 +90,27 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         return sendJson(token, "/tasks/$taskId/complete", "PATCH", body)
     }
 
-    fun updateTask(token: String, taskId: Int, input: UpdateTaskInput): TaskMutationResult {
-        val body = JSONObject()
-        input.userId?.let { body.put("userId", it) }
-        return sendJson(token, "/tasks/$taskId", "PUT", body)
+    fun addAssignee(token: String, taskId: Int, userId: Int): TaskMutationResult {
+        val body = JSONObject().put("userId", userId)
+        return sendJson(token, "/tasks/$taskId/users", "POST", body)
+    }
+
+    fun removeAssignee(token: String, taskId: Int, userId: Int): TaskMutationResult {
+        val connection = authedConnection("/tasks/$taskId/users/$userId", token, "DELETE")
+        return try {
+            val responseBody = connection.readBody()
+            when (connection.responseCode) {
+                HttpURLConnection.HTTP_NO_CONTENT -> TaskMutationResult.Success
+                HttpURLConnection.HTTP_UNAUTHORIZED -> TaskMutationResult.Unauthorized
+                else -> TaskMutationResult.ServerError(errorMessage(responseBody))
+            }
+        } catch (_: IOException) {
+            TaskMutationResult.NetworkError
+        } catch (_: Exception) {
+            TaskMutationResult.ServerError(null)
+        } finally {
+            connection.disconnect()
+        }
     }
 
     fun delete(token: String, taskId: Int): TaskMutationResult {
@@ -173,7 +190,7 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         return ApiTask(
             taskId = json.getInt("taskId"),
             projectId = json.getInt("projectId"),
-            userId = json.getInt("userId"),
+            userIds = json.parseUserIds(),
             title = json.getString("title"),
             description = json.optString("description"),
             status = json.optString("status", "pending"),
@@ -192,6 +209,15 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     private fun JSONObject.optNullableString(name: String): String? {
         if (isNull(name)) return null
         return optString(name).takeIf { it.isNotBlank() }
+    }
+
+    private fun JSONObject.parseUserIds(): List<Int> {
+        val array = optJSONArray("userIds") ?: return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                add(array.getInt(index))
+            }
+        }
     }
 
     private fun errorMessage(responseBody: String): String? {
@@ -225,10 +251,6 @@ sealed interface TaskResult {
     data object NetworkError : TaskResult
     data class ServerError(val message: String?) : TaskResult
 }
-
-data class UpdateTaskInput(
-    val userId: Int? = null
-)
 
 sealed interface TaskMutationResult {
     data object Success : TaskMutationResult

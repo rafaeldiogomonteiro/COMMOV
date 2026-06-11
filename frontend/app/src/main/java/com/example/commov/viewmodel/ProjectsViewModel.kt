@@ -115,7 +115,7 @@ class ProjectsViewModel(
             tasks = tasks.map { task ->
                 ProjectTask(
                     task = task.toDashboardTask(name),
-                    assignees = listOfNotNull(membersByUserId[task.userId])
+                    assignees = task.userIds.mapNotNull { membersByUserId[it] }
                 )
             },
             accentColorResId = colors.accentColorResId,

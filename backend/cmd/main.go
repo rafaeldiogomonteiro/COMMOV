@@ -27,6 +27,7 @@ func main() {
 	projectRepo := &postgres.ProjectRepo{DB: db}
 	projectUserRepo := &postgres.ProjectUserRepo{DB: db}
 	taskRepo := &postgres.TaskRepo{DB: db}
+	taskUserRepo := &postgres.TaskUserRepo{DB: db}
 	taskTimeEntryRepo := &postgres.TaskTimeEntryRepo{DB: db}
 	authService := &services.AuthService{UserRepo: userRepo}
 	userService := &services.UserService{
@@ -39,6 +40,7 @@ func main() {
 		ProjectRepo:       projectRepo,
 		ProjectUserRepo:   projectUserRepo,
 		TaskRepo:          taskRepo,
+		TaskUserRepo:      taskUserRepo,
 		TaskTimeEntryRepo: taskTimeEntryRepo,
 		AuthService:       authService,
 	}
@@ -49,6 +51,7 @@ func main() {
 	}
 	taskService := &services.TaskService{
 		TaskRepo:          taskRepo,
+		TaskUserRepo:      taskUserRepo,
 		TaskTimeEntryRepo: taskTimeEntryRepo,
 		ProjectRepo:       projectRepo,
 		ProjectUserRepo:   projectUserRepo,
@@ -61,7 +64,7 @@ func main() {
 		appLogger.Printf("default user created: %s", cfg.DefaultUser)
 	}
 
-	authRouter := &router.AuthRouter{AuthService: authService, UserService: userService}
+	authRouter := &router.AuthRouter{AuthService: authService}
 	userRouter := &router.UserRouter{
 		UserService: userService,
 		AuthService: authService,

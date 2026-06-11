@@ -38,14 +38,21 @@ func (r *TaskRepo) ListByProjectID(ctx context.Context, projectID int) ([]entity
 
 func (r *TaskRepo) ListByUserID(ctx context.Context, userID int) ([]entity.Task, error) {
 	var tasks []entity.Task
-	err := r.DB.WithContext(ctx).Where("user_id = ?", userID).Find(&tasks).Error
+	err := r.DB.WithContext(ctx).
+		Joins("INNER JOIN task_users ON task_users.task_id = tasks.task_id").
+		Where("task_users.user_id = ?", userID).
+		Order("tasks.task_id desc").
+		Find(&tasks).Error
+
 	return tasks, err
 }
 
 func (r *TaskRepo) ListByProjectAndUserID(ctx context.Context, projectID int, userID int) ([]entity.Task, error) {
 	var tasks []entity.Task
 	err := r.DB.WithContext(ctx).
-		Where("project_id = ? AND user_id = ?", projectID, userID).
+		Joins("INNER JOIN task_users ON task_users.task_id = tasks.task_id").
+		Where("tasks.project_id = ? AND task_users.user_id = ?", projectID, userID).
+		Order("tasks.task_id desc").
 		Find(&tasks).Error
 
 	return tasks, err

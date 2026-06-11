@@ -20,6 +20,7 @@ type UserReportService struct {
 	ProjectRepo       *postgres.ProjectRepo
 	ProjectUserRepo   *postgres.ProjectUserRepo
 	TaskRepo          *postgres.TaskRepo
+	TaskUserRepo      *postgres.TaskUserRepo
 	TaskTimeEntryRepo *postgres.TaskTimeEntryRepo
 	AuthService       *AuthService
 }
@@ -265,7 +266,7 @@ func (s *UserReportService) ExportProjectTasksPDF(ctx context.Context, actorUser
 		return nil, "", err
 	}
 
-	pdfBytes, err := renderProjectTasksReportPDF(report, s.UserRepo, ctx)
+	pdfBytes, err := renderProjectTasksReportPDF(report, s.UserRepo, s.TaskUserRepo, ctx)
 	if err != nil {
 		return nil, "", fmt.Errorf("render pdf: %w", err)
 	}
@@ -513,7 +514,12 @@ func renderProjectReportPDF(report *ProjectReport) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func renderProjectTasksReportPDF(report *ProjectReport, userRepo *postgres.UserRepo, ctx context.Context) ([]byte, error) {
+func renderProjectTasksReportPDF(
+	report *ProjectReport,
+	userRepo *postgres.UserRepo,
+	taskUserRepo *postgres.TaskUserRepo,
+	ctx context.Context,
+) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(15, 15, 15)
 	pdf.SetAutoPageBreak(true, 15)
@@ -551,26 +557,37 @@ func renderProjectTasksReportPDF(report *ProjectReport, userRepo *postgres.UserR
 		pdf.CellFormat(0, 6, "No tasks found for this project.", "", 1, "L", false, 0, "")
 	} else {
 		assigneeNames := map[int]string{}
+		taskAssigneeLabels := make(map[int]string, len(report.Tasks))
 		for _, task := range report.Tasks {
-			if _, ok := assigneeNames[task.UserID]; ok {
-				continue
+			assigneeIDs, err := taskUserRepo.ListUserIDsByTaskID(ctx, task.TaskID)
+			if err != nil {
+				return nil, fmt.Errorf("list task assignees: %w", err)
 			}
-			user, err := userRepo.GetByID(ctx, task.UserID)
-			if err != nil || user == nil {
-				assigneeNames[task.UserID] = fmt.Sprintf("User #%d", task.UserID)
-				continue
+			names := make([]string, 0, len(assigneeIDs))
+			for _, assigneeID := range assigneeIDs {
+				name, ok := assigneeNames[assigneeID]
+				if !ok {
+					user, err := userRepo.GetByID(ctx, assigneeID)
+					if err != nil || user == nil {
+						name = fmt.Sprintf("User #%d", assigneeID)
+					} else {
+						name = user.Name
+					}
+					assigneeNames[assigneeID] = name
+				}
+				names = append(names, name)
 			}
-			assigneeNames[task.UserID] = user.Name
+			taskAssigneeLabels[task.TaskID] = strings.Join(names, ", ")
 		}
 
 		sectionTitle(pdf, "Tasks", primary)
-		taskHeaders := []string{"ID", "Title", "Assignee", "Status", "Completion", "Spent", "Est."}
+		taskHeaders := []string{"ID", "Title", "Assignees", "Status", "Completion", "Spent", "Est."}
 		taskRows := make([][]string, 0, len(report.Tasks))
 		for _, task := range report.Tasks {
 			taskRows = append(taskRows, []string{
 				fmt.Sprintf("%d", task.TaskID),
 				truncate(task.Title, 24),
-				truncate(assigneeNames[task.UserID], 18),
+				truncate(taskAssigneeLabels[task.TaskID], 18),
 				task.Status,
 				fmt.Sprintf("%.0f%%", task.CompletionRate),
 				formatHours(task.TimeSpent),

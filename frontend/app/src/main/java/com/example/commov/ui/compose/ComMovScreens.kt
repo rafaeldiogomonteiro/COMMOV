@@ -106,7 +106,6 @@ import com.example.commov.data.local.SessionManager
 import com.example.commov.data.sync.ProfilePhotoSyncManager
 import com.example.commov.data.remote.AuthApi
 import com.example.commov.data.remote.AdminApi
-import com.example.commov.data.remote.RegisterResult
 import com.example.commov.data.remote.AdminMutationResult
 import com.example.commov.data.remote.AdminUsersResult
 import com.example.commov.data.remote.StatisticsApi
@@ -132,7 +131,6 @@ import com.example.commov.data.remote.TaskApi
 import com.example.commov.data.remote.UpdateProjectInput
 import com.example.commov.data.remote.UserApi
 import com.example.commov.data.remote.UpdateUserInput
-import com.example.commov.data.remote.UpdateTaskInput
 import com.example.commov.data.remote.TaskMutationResult
 import com.example.commov.data.remote.TaskTimeEntriesResult
 import com.example.commov.data.remote.TaskResult
@@ -385,328 +383,6 @@ fun LoginScreen() {
                     }.start()
                 }
         )
-    }
-}
-
-@Composable
-fun RegisterScreen() {
-    val context = LocalContext.current
-    val activity = context.findActivity()
-    val authApi = remember { AuthApi() }
-    val sessionManager = remember { SessionManager(context.applicationContext) }
-    val mainHandler = remember { Handler(Looper.getMainLooper()) }
-
-    var name by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var passwordVisible by remember { mutableStateOf(false) }
-    var confirmPasswordVisible by remember { mutableStateOf(false) }
-    var isLoading by remember { mutableStateOf(false) }
-    var requiredError by remember { mutableStateOf(false) }
-    var passwordMismatch by remember { mutableStateOf(false) }
-    var generalErrorResId by remember { mutableStateOf(0) }
-    var generalErrorMessage by remember { mutableStateOf<String?>(null) }
-
-    val apiBaseUrl = remember { com.example.commov.BuildConfig.API_BASE_URL }
-
-    fun clearErrors() {
-        requiredError = false
-        passwordMismatch = false
-        generalErrorResId = 0
-        generalErrorMessage = null
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colorResource(R.color.login_background))
-            .statusBarsPadding()
-            .navigationBarsPadding(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 20.dp)
-                .widthIn(max = 520.dp)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .cardBackground(R.color.login_card, R.color.login_card_stroke, 8.dp)
-                .padding(start = 24.dp, top = 28.dp, end = 24.dp, bottom = 28.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.register_title),
-                modifier = Modifier.fillMaxWidth(),
-                color = colorResource(R.color.login_text_primary),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = stringResource(R.string.register_subtitle),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                color = colorResource(R.color.login_text_secondary),
-                fontSize = 14.sp,
-                lineHeight = 18.sp
-            )
-
-            Text(
-                text = stringResource(R.string.register_name),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 20.dp),
-                color = colorResource(R.color.login_text_secondary),
-                fontSize = 16.sp
-            )
-            LoginInput(
-                value = name,
-                onValueChange = {
-                    name = it
-                    clearErrors()
-                },
-                iconResId = R.drawable.ic_admin,
-                contentDescription = stringResource(R.string.register_name),
-                keyboardType = KeyboardType.Text,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-
-            Text(
-                text = stringResource(R.string.register_username),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                color = colorResource(R.color.login_text_secondary),
-                fontSize = 16.sp
-            )
-            LoginInput(
-                value = username,
-                onValueChange = {
-                    username = it
-                    clearErrors()
-                },
-                iconResId = R.drawable.ic_admin,
-                contentDescription = stringResource(R.string.register_username),
-                keyboardType = KeyboardType.Text,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-
-            Text(
-                text = stringResource(R.string.register_email),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                color = colorResource(R.color.login_text_secondary),
-                fontSize = 16.sp
-            )
-            LoginInput(
-                value = email,
-                onValueChange = {
-                    email = it
-                    clearErrors()
-                },
-                iconResId = R.drawable.ic_mail,
-                contentDescription = stringResource(R.string.content_email_icon),
-                keyboardType = KeyboardType.Email,
-                modifier = Modifier.padding(top = 6.dp)
-            )
-
-            Text(
-                text = stringResource(R.string.register_password),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                color = colorResource(R.color.login_text_secondary),
-                fontSize = 14.sp
-            )
-            LoginInput(
-                value = password,
-                onValueChange = {
-                    password = it
-                    clearErrors()
-                },
-                iconResId = R.drawable.ic_lock,
-                contentDescription = stringResource(R.string.content_password_icon),
-                keyboardType = KeyboardType.Password,
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButtonLike(
-                        iconResId = R.drawable.ic_eye,
-                        contentDescription = stringResource(R.string.content_toggle_password),
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(38.dp),
-                        onClick = { passwordVisible = !passwordVisible }
-                    )
-                },
-                modifier = Modifier.padding(top = 6.dp)
-            )
-
-            Text(
-                text = stringResource(R.string.register_confirm_password),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                color = colorResource(R.color.login_text_secondary),
-                fontSize = 14.sp
-            )
-            LoginInput(
-                value = confirmPassword,
-                onValueChange = {
-                    confirmPassword = it
-                    clearErrors()
-                },
-                iconResId = R.drawable.ic_lock,
-                contentDescription = stringResource(R.string.content_password_icon),
-                keyboardType = KeyboardType.Password,
-                visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButtonLike(
-                        iconResId = R.drawable.ic_eye,
-                        contentDescription = stringResource(R.string.content_toggle_password),
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(38.dp),
-                        onClick = { confirmPasswordVisible = !confirmPasswordVisible }
-                    )
-                },
-                modifier = Modifier.padding(top = 6.dp)
-            )
-
-            if (requiredError) {
-                Text(
-                    text = stringResource(R.string.register_required_error),
-                    modifier = Modifier.padding(top = 12.dp),
-                    color = colorResource(R.color.login_error),
-                    fontSize = 12.sp
-                )
-            }
-            if (passwordMismatch) {
-                Text(
-                    text = stringResource(R.string.register_password_mismatch),
-                    modifier = Modifier.padding(top = 4.dp),
-                    color = colorResource(R.color.login_error),
-                    fontSize = 12.sp
-                )
-            }
-            ErrorText(generalErrorResId)
-            generalErrorMessage?.let { message ->
-                Text(
-                    text = message,
-                    modifier = Modifier.padding(top = 4.dp),
-                    color = colorResource(R.color.login_error),
-                    fontSize = 12.sp
-                )
-            }
-
-            if (generalErrorResId != 0 || generalErrorMessage != null) {
-                Text(
-                    text = "API: $apiBaseUrl",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    color = colorResource(R.color.login_text_secondary),
-                    fontSize = 10.sp
-                )
-            }
-
-            FilledActionButton(
-                text = stringResource(if (isLoading) R.string.register_loading else R.string.register_button),
-                iconResId = R.drawable.ic_arrow_right,
-                colorResId = R.color.login_button,
-                radius = 6.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 24.dp)
-                    .height(48.dp),
-                onClick = {
-                    if (isLoading) return@FilledActionButton
-
-                    clearErrors()
-
-                    val nameTrim = name.trim()
-                    val usernameTrim = username.trim()
-                    val emailTrim = email.trim()
-                    val pw = password
-                    val cpw = confirmPassword
-
-                    if (nameTrim.isEmpty() || usernameTrim.isEmpty() || emailTrim.isEmpty() || pw.length < 6 || cpw.length < 6) {
-                        requiredError = true
-                        return@FilledActionButton
-                    }
-                    if (pw != cpw) {
-                        passwordMismatch = true
-                        return@FilledActionButton
-                    }
-
-                    isLoading = true
-
-                    Thread {
-                        val regResult = authApi.register(nameTrim, usernameTrim, emailTrim, pw)
-                        Log.d("RegisterScreen", "register result: $regResult")
-                        if (regResult is RegisterResult.Success) {
-                            // Registration succeeded. Do not auto-login.
-                            // Return the user to the login screen so they can sign in manually.
-                            mainHandler.post {
-                                isLoading = false
-                                Toast.makeText(
-                                    context,
-                                    context.getString(R.string.register_success),
-                                    Toast.LENGTH_LONG
-                                ).show()
-                                activity.startActivity(Intent(activity, MainActivity::class.java))
-                                activity.finish()
-                            }
-                        } else {
-                            mainHandler.post {
-                                isLoading = false
-                                generalErrorMessage = null
-                                when (regResult) {
-                                    RegisterResult.ValidationError -> {
-                                        generalErrorResId = R.string.register_error_validation
-                                    }
-                                    RegisterResult.Conflict -> {
-                                        generalErrorResId = R.string.register_error_conflict
-                                    }
-                                    RegisterResult.NetworkError -> {
-                                        generalErrorResId = R.string.register_error_network
-                                    }
-                                    is RegisterResult.ServerError -> {
-                                        generalErrorResId = 0
-                                        generalErrorMessage = regResult.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.register_error_unknown)
-                                    }
-                                    else -> {
-                                        generalErrorResId = R.string.register_error_unknown
-                                    }
-                                }
-                            }
-                        }
-                    }.start()
-                }
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.register_have_account),
-                    color = colorResource(R.color.login_text_secondary),
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = stringResource(R.string.register_sign_in_link),
-                    color = colorResource(R.color.login_link),
-                    fontSize = 14.sp,
-                    modifier = Modifier.clickable {
-                        activity.startActivity(Intent(activity, MainActivity::class.java))
-                        activity.finish()
-                    }
-                )
-            }
-        }
     }
 }
 
@@ -2516,7 +2192,7 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
     var assigneesLoaded by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var assigneeLabel by remember { mutableStateOf("") }
+    var assigneeIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var estimatedEndDate by remember { mutableStateOf("") }
     var estimatedTime by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
@@ -2555,7 +2231,6 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                 when (result) {
                     is UsersResult.Success -> {
                         assignees = result.users
-                        assigneeLabel = result.users.firstOrNull()?.label().orEmpty()
                     }
                     UsersResult.Unauthorized -> {
                         sessionManager.clear()
@@ -2570,7 +2245,6 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                                 when (fallback) {
                                     is UsersResult.Success -> {
                                         assignees = fallback.users
-                                        assigneeLabel = fallback.users.firstOrNull()?.label().orEmpty()
                                     }
                                     else -> Toast.makeText(context, R.string.create_task_members_error, Toast.LENGTH_LONG).show()
                                 }
@@ -2617,14 +2291,25 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                         fontSize = 13.sp
                     )
                 } else {
-                    SelectInput(
-                        selected = assigneeLabel.ifBlank { assignees.first().label() },
-                        values = assignees.map { it.label() },
-                        onSelected = {
-                            assigneeLabel = it
-                            requiredError = false
-                        }
-                    )
+                    assignees.forEach { user ->
+                        val selected = assigneeIds.contains(user.userId)
+                        SelectableMemberRow(
+                            user = user,
+                            selected = selected,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .padding(top = 8.dp),
+                            onClick = {
+                                assigneeIds = if (selected) {
+                                    assigneeIds - user.userId
+                                } else {
+                                    assigneeIds + user.userId
+                                }
+                                requiredError = false
+                            }
+                        )
+                    }
                 }
                 CreateTaskLabel(R.string.create_task_description)
                 CreateTaskInput(
@@ -2685,12 +2370,11 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                     if (isSaving) {
                         return@FilledActionButton
                     }
-                    val userId = assignees.firstOrNull { it.label() == assigneeLabel }?.userId ?: 0
                     val estimatedTimeValue = estimatedTime.toDoubleOrNull()
                     if (
                         projectId <= 0 ||
                         title.trim().isEmpty() ||
-                        userId <= 0 ||
+                        assigneeIds.isEmpty() ||
                         estimatedEndDate.isBlank() ||
                         estimatedTimeValue == null ||
                         estimatedTimeValue < 0
@@ -2722,7 +2406,7 @@ fun CreateTaskScreen(projectId: Int, projectName: String?) {
                             token,
                             projectId,
                             RemoteCreateTaskInput(
-                                userId = userId,
+                                userIds = assigneeIds.toList(),
                                 title = title.trim(),
                                 description = description.trim(),
                                 estimatedEndDate = estimatedEndDate,
@@ -3014,14 +2698,14 @@ fun TaskDetailScreen(taskId: Int) {
             onUserSelected = { user ->
                 showAssigneePicker = false
                 mutate(
-                    action = { token -> taskApi.updateTask(token, taskId, UpdateTaskInput(userId = user.userId)) },
+                    action = { token -> taskApi.addAssignee(token, taskId, user.userId) },
                     successMessage = R.string.task_assignee_updated
                 )
             }
         )
     }
 
-    val assigneeMember = task?.userId?.let { userId ->
+    val assigneeMembers = task?.userIds.orEmpty().mapNotNull { userId ->
         projectMembers.firstOrNull { it.userId == userId }?.toProjectMember(
             index = projectMembers.indexOfFirst { it.userId == userId }.coerceAtLeast(0),
             isManager = userId == projectManagerId
@@ -3084,12 +2768,13 @@ fun TaskDetailScreen(taskId: Int) {
 
             DetailSectionHeader(
                 title = stringResource(R.string.task_detail_assignee),
-                count = if (assigneeMember != null) 1 else 0,
+                count = assigneeMembers.size,
                 topPadding = 22.dp,
                 onAddClick = if (canManageTasks) {
                     {
+                        val assignedIds = task?.userIds.orEmpty().toSet()
                         assigneePickerUsers = projectMembers.filter { member ->
-                            member.active && member.userId != task?.userId
+                            member.active && member.userId !in assignedIds
                         }
                         showAssigneePicker = true
                     }
@@ -3097,29 +2782,29 @@ fun TaskDetailScreen(taskId: Int) {
                     null
                 }
             )
-            if (assigneeMember == null) {
+            if (assigneeMembers.isEmpty()) {
                 EmptyStateCard(text = stringResource(R.string.task_detail_no_assignee))
             } else {
-                TeamMemberCard(
-                    member = assigneeMember,
-                    modifier = Modifier.fillMaxWidth(),
-                    onRemove = if (canManageTasks && projectManagerId > 0 && assigneeMember.userId != projectManagerId) {
-                        {
-                            mutate(
-                                action = { token ->
-                                    taskApi.updateTask(
-                                        token,
-                                        taskId,
-                                        UpdateTaskInput(userId = projectManagerId)
-                                    )
-                                },
-                                successMessage = R.string.task_assignee_removed
-                            )
+                assigneeMembers.forEach { member ->
+                    TeamMemberCard(
+                        member = member,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        onRemove = if (canManageTasks && assigneeMembers.size > 1) {
+                            {
+                                mutate(
+                                    action = { token ->
+                                        taskApi.removeAssignee(token, taskId, member.userId)
+                                    },
+                                    successMessage = R.string.task_assignee_removed
+                                )
+                            }
+                        } else {
+                            null
                         }
-                    } else {
-                        null
-                    }
-                )
+                    )
+                }
             }
 
             if (task?.status != "completed") {

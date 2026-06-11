@@ -63,7 +63,7 @@ class DashboardApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             ApiTask(
                 taskId = json.getInt("taskId"),
                 projectId = json.getInt("projectId"),
-                userId = json.getInt("userId"),
+                userIds = json.parseUserIds(),
                 title = json.getString("title"),
                 description = json.optString("description"),
                 status = json.optString("status", "pending"),
@@ -100,6 +100,15 @@ class DashboardApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         return optString(name).takeIf { it.isNotBlank() }
     }
 
+    private fun JSONObject.parseUserIds(): List<Int> {
+        val array = optJSONArray("userIds") ?: return emptyList()
+        return buildList {
+            for (index in 0 until array.length()) {
+                add(array.getInt(index))
+            }
+        }
+    }
+
     private fun ArrayResult.toDashboardResult(): DashboardResult {
         return when (this) {
             is ArrayResult.Success -> DashboardResult.Success(emptyList(), emptyMap())
@@ -113,7 +122,7 @@ class DashboardApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
 data class ApiTask(
     val taskId: Int,
     val projectId: Int,
-    val userId: Int,
+    val userIds: List<Int> = emptyList(),
     val title: String,
     val description: String,
     val status: String,

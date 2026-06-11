@@ -5,7 +5,7 @@ import "time"
 type Task struct {
 	TaskID           int        `json:"taskId" gorm:"column:task_id;primaryKey;autoIncrement"`
 	ProjectID        int        `json:"projectId" gorm:"column:project_id;not null"`
-	UserID           int        `json:"userId" gorm:"column:user_id;not null"`
+	UserIDs          []int      `json:"userIds" gorm:"-"`
 	Title            string     `json:"title" gorm:"type:varchar(160);not null"`
 	Description      string     `json:"description" gorm:"type:text"`
 	Status           string     `json:"status" gorm:"type:varchar(50);not null"`

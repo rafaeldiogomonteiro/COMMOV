@@ -26,6 +26,8 @@ func (r *TaskRouter) Register(chiRouter chi.Router) {
 	chiRouter.Get("/tasks/{taskId}/time-entries", r.listTimeEntries)
 	chiRouter.Post("/tasks/{taskId}/complete", r.complete)
 	chiRouter.Patch("/tasks/{taskId}/complete", r.complete)
+	chiRouter.Post("/tasks/{taskId}/users", r.addAssignee)
+	chiRouter.Delete("/tasks/{taskId}/users/{userId}", r.removeAssignee)
 	chiRouter.Get("/projects/{projectId}/tasks", r.listByProject)
 	chiRouter.Post("/projects/{projectId}/tasks", r.create)
 }
@@ -98,6 +100,7 @@ func (r *TaskRouter) create(w http.ResponseWriter, req *http.Request) {
 	var input struct {
 		ProjectID        int     `json:"projectId"`
 		UserID           int     `json:"userId"`
+		UserIDs          []int   `json:"userIds"`
 		Title            string  `json:"title"`
 		Description      string  `json:"description"`
 		EstimatedEndDate string  `json:"estimatedEndDate"`
@@ -124,9 +127,14 @@ func (r *TaskRouter) create(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	userIDs := input.UserIDs
+	if len(userIDs) == 0 && input.UserID > 0 {
+		userIDs = []int{input.UserID}
+	}
+
 	task, err := r.TaskService.Create(req.Context(), actor.UserID, services.TaskCreateInput{
 		ProjectID:        input.ProjectID,
-		UserID:           input.UserID,
+		UserIDs:          userIDs,
 		Title:            input.Title,
 		Description:      input.Description,
 		EstimatedEndDate: &estimatedEndDate,
@@ -157,7 +165,6 @@ func (r *TaskRouter) update(w http.ResponseWriter, req *http.Request) {
 
 	var input struct {
 		ProjectID        *int     `json:"projectId"`
-		UserID           *int     `json:"userId"`
 		Title            *string  `json:"title"`
 		Description      *string  `json:"description"`
 		Status           *string  `json:"status"`
@@ -194,7 +201,6 @@ func (r *TaskRouter) update(w http.ResponseWriter, req *http.Request) {
 
 	task, err := r.TaskService.Update(req.Context(), actor.UserID, taskID, services.TaskUpdateInput{
 		ProjectID:        input.ProjectID,
-		UserID:           input.UserID,
 		Title:            input.Title,
 		Description:      input.Description,
 		Status:           input.Status,
@@ -347,4 +353,60 @@ func (r *TaskRouter) complete(w http.ResponseWriter, req *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, task)
+}
+
+func (r *TaskRouter) addAssignee(w http.ResponseWriter, req *http.Request) {
+	defer req.Body.Close()
+
+	actor, ok := requireAuthenticated(w, req, r.AuthService)
+	if !ok {
+		return
+	}
+
+	taskID, err := intURLParam(req, "taskId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "taskId is invalid")
+		return
+	}
+
+	var input struct {
+		UserID int `json:"userId"`
+	}
+	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	task, err := r.TaskService.AddAssignee(req.Context(), actor.UserID, taskID, input.UserID)
+	if err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, task)
+}
+
+func (r *TaskRouter) removeAssignee(w http.ResponseWriter, req *http.Request) {
+	actor, ok := requireAuthenticated(w, req, r.AuthService)
+	if !ok {
+		return
+	}
+
+	taskID, err := intURLParam(req, "taskId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "taskId is invalid")
+		return
+	}
+	userID, err := intURLParam(req, "userId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "userId is invalid")
+		return
+	}
+
+	if err := r.TaskService.RemoveAssignee(req.Context(), actor.UserID, taskID, userID); err != nil {
+		writeUserServiceError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
