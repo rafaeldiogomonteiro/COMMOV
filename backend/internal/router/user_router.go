@@ -17,9 +17,8 @@ import (
 )
 
 type UserRouter struct {
-	UserService       *services.UserService
-	UserReportService *services.UserReportService
-	AuthService       *services.AuthService
+	UserService *services.UserService
+	AuthService *services.AuthService
 }
 
 const photoUploadDir = "photos/image"
@@ -32,7 +31,6 @@ func (r *UserRouter) Register(chiRouter chi.Router) {
 	chiRouter.Put("/users/{userId}", r.update)
 	chiRouter.Patch("/users/{userId}", r.update)
 	chiRouter.Patch("/users/{userId}/password", r.changePassword)
-	chiRouter.Get("/users/{userId}/export", r.exportReport)
 	chiRouter.Delete("/users/{userId}", r.delete)
 	chiRouter.Post("/photos/image", r.uploadPhoto)
 	chiRouter.Handle("/photos/image/*", http.StripPrefix("/photos/image/", http.FileServer(http.Dir(photoUploadDir))))
@@ -247,35 +245,6 @@ func (r *UserRouter) changePassword(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (r *UserRouter) exportReport(w http.ResponseWriter, req *http.Request) {
-	actor, loggedIn, err := r.AuthService.CheckLogin(req.Context(), authToken(req))
-	if err != nil {
-		writeUserServiceError(w, err)
-		return
-	}
-	if !loggedIn {
-		writeError(w, http.StatusUnauthorized, "invalid token")
-		return
-	}
-
-	userID, err := strconv.Atoi(chi.URLParam(req, "userId"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "userId is invalid")
-		return
-	}
-
-	pdfBytes, filename, err := r.UserReportService.ExportPDF(req.Context(), actor.UserID, userID)
-	if err != nil {
-		writeUserServiceError(w, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(pdfBytes)
 }
 
 func (r *UserRouter) delete(w http.ResponseWriter, req *http.Request) {

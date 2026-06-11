@@ -107,9 +107,13 @@ import com.example.commov.data.sync.ProfilePhotoSyncManager
 import com.example.commov.data.remote.AuthApi
 import com.example.commov.data.remote.AdminApi
 import com.example.commov.data.remote.RegisterResult
-import com.example.commov.data.remote.AdminExportResult
 import com.example.commov.data.remote.AdminMutationResult
 import com.example.commov.data.remote.AdminUsersResult
+import com.example.commov.data.remote.StatisticsApi
+import com.example.commov.data.remote.StatisticsExportResult
+import com.example.commov.data.remote.StatisticsUsersResult
+import com.example.commov.data.remote.ProjectsResult
+import com.example.commov.data.remote.ApiProject
 import com.example.commov.data.remote.ApiTask
 import com.example.commov.data.remote.ApiTaskTimeEntry
 import com.example.commov.data.remote.ApiUser
@@ -145,6 +149,7 @@ import com.example.commov.ui.projects.CreateTaskActivity
 import com.example.commov.ui.projects.ProjectsActivity
 import com.example.commov.ui.projects.TaskDetailActivity
 import com.example.commov.ui.settings.SettingsActivity
+import com.example.commov.ui.statistics.StatisticsActivity
 import com.example.commov.viewmodel.DashboardUiState
 import com.example.commov.viewmodel.DashboardViewModel
 import com.example.commov.viewmodel.LoginUiState
@@ -2045,6 +2050,22 @@ private fun TimeSpentEntryCard(entry: ApiTaskTimeEntry, modifier: Modifier = Mod
                     lineHeight = 18.sp
                 )
             }
+            if (entry.photo.isNotBlank()) {
+                val photoUrl = remember(entry.photo) { PhotoApi().photoUrl(entry.photo) }
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(photoUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = stringResource(R.string.task_detail_photo),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .heightIn(max = 220.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.FillWidth
+                )
+            }
         }
     }
 }
@@ -2052,11 +2073,17 @@ private fun TimeSpentEntryCard(entry: ApiTaskTimeEntry, modifier: Modifier = Mod
 @Composable
 private fun AddTimeSpentDialog(
     onDismiss: () -> Unit,
-    onConfirm: (hours: Double, observation: String) -> Unit
+    onConfirm: (hours: Double, observation: String, imageUri: Uri?) -> Unit
 ) {
+    val context = LocalContext.current
     var hours by remember { mutableStateOf("") }
     var observation by remember { mutableStateOf("") }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var requiredError by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        selectedImageUri = uri
+    }
 
     AppFormDialog(
         title = stringResource(R.string.task_detail_add_time_spent),
@@ -2068,7 +2095,7 @@ private fun AddTimeSpentDialog(
             if (parsedHours == null || parsedHours <= 0 || observation.trim().isEmpty()) {
                 requiredError = true
             } else {
-                onConfirm(parsedHours, observation.trim())
+                onConfirm(parsedHours, observation.trim(), selectedImageUri)
             }
         }
     ) {
@@ -2088,6 +2115,39 @@ private fun AddTimeSpentDialog(
             onValueChange = { observation = it },
             singleLine = false
         )
+        CreateTaskLabel(R.string.task_detail_photo)
+        if (selectedImageUri != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(selectedImageUri)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = stringResource(R.string.task_detail_photo),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .heightIn(max = 180.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.FillWidth
+            )
+            Text(
+                text = stringResource(R.string.task_detail_remove_photo),
+                color = colorResource(R.color.login_link),
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .clickable { selectedImageUri = null }
+            )
+        } else {
+            OutlinedActionButton(
+                text = stringResource(R.string.task_detail_upload_photo),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp)
+                    .height(44.dp),
+                onClick = { photoPickerLauncher.launch("image/*") }
+            )
+        }
         if (requiredError) {
             Text(
                 text = stringResource(R.string.create_task_required_error),
@@ -2703,6 +2763,7 @@ fun TaskDetailScreen(taskId: Int) {
     val activity = context.findActivity()
     val sessionManager = remember { SessionManager(context.applicationContext) }
     val taskApi = remember { TaskApi() }
+    val photoApi = remember { PhotoApi() }
     val projectsApi = remember { ProjectsApi() }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val canManageTasks = remember { sessionManager.canManageProjects() }
@@ -2871,20 +2932,75 @@ fun TaskDetailScreen(taskId: Int) {
     if (showAddTimeDialog) {
         AddTimeSpentDialog(
             onDismiss = { showAddTimeDialog = false },
-            onConfirm = { hours, observation ->
+            onConfirm = { hours, observation, imageUri ->
                 showAddTimeDialog = false
-                mutate(
-                    action = { token ->
-                        taskApi.addTimeSpent(
-                            token,
-                            taskId,
-                            hours,
-                            currentDateString(),
-                            observation
-                        )
-                    },
-                    successMessage = R.string.task_detail_updated
-                )
+                val token = sessionManager.token()
+                if (token.isNullOrBlank()) {
+                    authFailure()
+                } else {
+                isSaving = true
+                Thread {
+                    var photoPath: String? = null
+                    if (imageUri != null) {
+                        val mimeType = context.contentResolver.getType(imageUri).orEmpty().ifBlank { "image/jpeg" }
+                        val fileName = imageUri.lastPathSegment?.substringAfterLast('/')?.ifBlank { "timelog.jpg" } ?: "timelog.jpg"
+                        val bytes = ProfilePhotoImageReader.readCompressedJpeg(context, imageUri)
+                            ?: ProfilePhotoImageReader.readRawBytes(context, imageUri)
+                        if (bytes == null || bytes.isEmpty()) {
+                            mainHandler.post {
+                                isSaving = false
+                                Toast.makeText(context, R.string.settings_photo_error, Toast.LENGTH_LONG).show()
+                            }
+                            return@Thread
+                        }
+                        when (val uploadResult = photoApi.uploadPhoto(token, fileName, bytes, mimeType)) {
+                            is PhotoUploadResult.Success -> photoPath = uploadResult.path
+                            PhotoUploadResult.Unauthorized -> {
+                                mainHandler.post {
+                                    isSaving = false
+                                    authFailure()
+                                }
+                                return@Thread
+                            }
+                            PhotoUploadResult.NetworkError,
+                            is PhotoUploadResult.ServerError -> {
+                                mainHandler.post {
+                                    isSaving = false
+                                    Toast.makeText(context, R.string.settings_photo_error, Toast.LENGTH_LONG).show()
+                                }
+                                return@Thread
+                            }
+                        }
+                    }
+
+                    val result = taskApi.addTimeSpent(
+                        token,
+                        taskId,
+                        hours,
+                        currentDateString(),
+                        observation,
+                        photoPath
+                    )
+                    mainHandler.post {
+                        isSaving = false
+                        when (result) {
+                            TaskMutationResult.Success -> {
+                                Toast.makeText(context, R.string.task_detail_updated, Toast.LENGTH_LONG).show()
+                                loadTask()
+                            }
+                            TaskMutationResult.Unauthorized -> authFailure()
+                            TaskMutationResult.NetworkError -> {
+                                Toast.makeText(context, R.string.task_detail_error, Toast.LENGTH_LONG).show()
+                            }
+                            is TaskMutationResult.ServerError -> {
+                                val message = result.message?.takeIf { it.isNotBlank() }
+                                    ?: context.getString(R.string.task_detail_error)
+                                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                }.start()
+                }
             }
         )
     }
@@ -3054,7 +3170,6 @@ fun AdminScreen() {
     var userToChangePassword by remember { mutableStateOf<ApiUser?>(null) }
     var userToDelete by remember { mutableStateOf<ApiUser?>(null) }
     var isSaving by remember { mutableStateOf(false) }
-    var isExporting by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
 
     fun handleAuthFailure() {
@@ -3119,43 +3234,6 @@ fun AdminScreen() {
                     is AdminMutationResult.ServerError -> Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
                 }
                 onFinished()
-            }
-        }.start()
-    }
-
-    fun exportUser(user: ApiUser) {
-        if (isExporting) return
-
-        val token = sessionManager.token()
-        if (token.isNullOrBlank()) {
-            handleAuthFailure()
-            return
-        }
-
-        isExporting = true
-        Thread {
-            val result = adminApi.exportUserReport(token, user.userId)
-            mainHandler.post {
-                when (result) {
-                    is AdminExportResult.Success -> {
-                        val uri = savePdfToDownloads(context, result.bytes, result.filename)
-                        if (uri == null) {
-                            Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
-                        } else {
-                            val opened = openExportedPdf(context, uri)
-                            Toast.makeText(
-                                context,
-                                if (opened) R.string.admin_export_success else R.string.admin_export_no_viewer,
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
-                    }
-                    AdminExportResult.Unauthorized -> handleAuthFailure()
-                    AdminExportResult.Forbidden -> Toast.makeText(context, R.string.admin_forbidden, Toast.LENGTH_LONG).show()
-                    AdminExportResult.NetworkError,
-                    is AdminExportResult.ServerError -> Toast.makeText(context, R.string.admin_error, Toast.LENGTH_LONG).show()
-                }
-                isExporting = false
             }
         }.start()
     }
@@ -3284,7 +3362,6 @@ fun AdminScreen() {
                             .padding(top = 10.dp),
                         onEdit = { userToEdit = user },
                         onChangePassword = { userToChangePassword = user },
-                        onExport = { exportUser(user) },
                         onDelete = { userToDelete = user }
                     )
                 }
@@ -3394,10 +3471,258 @@ fun AdminScreen() {
 }
 
 @Composable
+fun StatisticsScreen() {
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val sessionManager = remember { SessionManager(context.applicationContext) }
+    val statisticsApi = remember { StatisticsApi() }
+    val projectsApi = remember { ProjectsApi() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    var users by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
+    var projects by remember { mutableStateOf<List<ApiProject>>(emptyList()) }
+    var category by remember { mutableStateOf(StatisticsCategory.USERS) }
+    var selectedUserLabel by remember { mutableStateOf("") }
+    var selectedProjectLabel by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(true) }
+    var isExporting by remember { mutableStateOf(false) }
+
+    fun handleAuthFailure() {
+        sessionManager.clear()
+        activity.startActivity(Intent(activity, MainActivity::class.java))
+        activity.finish()
+    }
+
+    fun loadData() {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            handleAuthFailure()
+            return
+        }
+
+        Thread {
+            val usersResult = statisticsApi.users(token)
+            val projectsResult = projectsApi.listProjects(token)
+            mainHandler.post {
+                isLoading = false
+                when (usersResult) {
+                    is StatisticsUsersResult.Success -> {
+                        users = usersResult.users
+                        selectedUserLabel = usersResult.users.firstOrNull()?.label().orEmpty()
+                    }
+                    StatisticsUsersResult.Unauthorized -> handleAuthFailure()
+                    StatisticsUsersResult.Forbidden -> {
+                        Toast.makeText(context, R.string.statistics_forbidden, Toast.LENGTH_LONG).show()
+                        activity.finish()
+                    }
+                    StatisticsUsersResult.NetworkError,
+                    is StatisticsUsersResult.ServerError -> {
+                        Toast.makeText(context, R.string.statistics_error, Toast.LENGTH_LONG).show()
+                    }
+                }
+                when (projectsResult) {
+                    is ProjectsResult.Success -> {
+                        projects = projectsResult.projects
+                        selectedProjectLabel = projectsResult.projects.firstOrNull()?.name.orEmpty()
+                    }
+                    ProjectsResult.Unauthorized -> handleAuthFailure()
+                    ProjectsResult.NetworkError,
+                    is ProjectsResult.ServerError -> {
+                        if (usersResult !is StatisticsUsersResult.Forbidden) {
+                            Toast.makeText(context, R.string.statistics_error, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+        }.start()
+    }
+
+    fun exportReport() {
+        if (isExporting) return
+
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            handleAuthFailure()
+            return
+        }
+
+        val resultProvider: (String) -> StatisticsExportResult = when (category) {
+            StatisticsCategory.USERS -> {
+                val userId = users.firstOrNull { it.label() == selectedUserLabel }?.userId
+                if (userId == null) {
+                    Toast.makeText(context, R.string.statistics_select_target, Toast.LENGTH_LONG).show()
+                    return
+                }
+                { statisticsApi.exportUserReport(it, userId) }
+            }
+            StatisticsCategory.PROJECTS,
+            StatisticsCategory.PROJECT_TASKS -> {
+                val projectId = projects.firstOrNull { it.name == selectedProjectLabel }?.projectId
+                if (projectId == null) {
+                    Toast.makeText(context, R.string.statistics_select_target, Toast.LENGTH_LONG).show()
+                    return
+                }
+                if (category == StatisticsCategory.PROJECTS) {
+                    { statisticsApi.exportProjectReport(it, projectId) }
+                } else {
+                    { statisticsApi.exportProjectTasksReport(it, projectId) }
+                }
+            }
+        }
+
+        isExporting = true
+        Thread {
+            val result = resultProvider(token)
+            mainHandler.post {
+                when (result) {
+                    is StatisticsExportResult.Success -> {
+                        val uri = savePdfToDownloads(context, result.bytes, result.filename)
+                        if (uri == null) {
+                            Toast.makeText(context, R.string.statistics_error, Toast.LENGTH_LONG).show()
+                        } else {
+                            val opened = openExportedPdf(context, uri)
+                            Toast.makeText(
+                                context,
+                                if (opened) R.string.statistics_export_success else R.string.statistics_export_no_viewer,
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                    StatisticsExportResult.Unauthorized -> handleAuthFailure()
+                    StatisticsExportResult.Forbidden -> Toast.makeText(context, R.string.statistics_forbidden, Toast.LENGTH_LONG).show()
+                    StatisticsExportResult.NetworkError,
+                    is StatisticsExportResult.ServerError -> Toast.makeText(context, R.string.statistics_error, Toast.LENGTH_LONG).show()
+                }
+                isExporting = false
+            }
+        }.start()
+    }
+
+    LaunchedEffect(Unit) {
+        if (!sessionManager.canManageProjects()) {
+            Toast.makeText(context, R.string.statistics_forbidden, Toast.LENGTH_LONG).show()
+            activity.finish()
+            return@LaunchedEffect
+        }
+        loadData()
+    }
+
+    val categoryOptions = listOf(
+        stringResource(R.string.statistics_category_users),
+        stringResource(R.string.statistics_category_projects),
+        stringResource(R.string.statistics_category_project_tasks)
+    )
+    val categoryLabel = when (category) {
+        StatisticsCategory.USERS -> categoryOptions[0]
+        StatisticsCategory.PROJECTS -> categoryOptions[1]
+        StatisticsCategory.PROJECT_TASKS -> categoryOptions[2]
+    }
+    val userOptions = users.map { it.label() }
+    val projectOptions = projects.map { it.name }
+
+    SubPageScaffold {
+        SubPageContent {
+            PageTopBar(
+                title = stringResource(R.string.statistics_title),
+                subtitle = stringResource(R.string.statistics_subtitle),
+                onBack = { activity.finish() }
+            )
+            if (isLoading) {
+                CreateFormScreenSkeleton()
+            } else {
+                FormSection(R.string.statistics_section_type) {
+                    CreateTaskLabelNoTop(R.string.statistics_category)
+                    SelectInput(
+                        selected = categoryLabel,
+                        values = categoryOptions,
+                        onSelected = { label ->
+                            category = when (label) {
+                                categoryOptions[1] -> StatisticsCategory.PROJECTS
+                                categoryOptions[2] -> StatisticsCategory.PROJECT_TASKS
+                                else -> StatisticsCategory.USERS
+                            }
+                        }
+                    )
+                }
+                FormSection(R.string.statistics_section_target) {
+                    when (category) {
+                        StatisticsCategory.USERS -> {
+                            CreateTaskLabelNoTop(R.string.statistics_select_user)
+                            if (userOptions.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.statistics_no_users),
+                                    modifier = Modifier.padding(top = 6.dp),
+                                    color = colorResource(R.color.dashboard_text_secondary),
+                                    fontSize = 13.sp
+                                )
+                            } else {
+                                SelectInput(
+                                    selected = selectedUserLabel.ifBlank { userOptions.first() },
+                                    values = userOptions,
+                                    onSelected = { selectedUserLabel = it }
+                                )
+                            }
+                        }
+                        StatisticsCategory.PROJECTS,
+                        StatisticsCategory.PROJECT_TASKS -> {
+                            CreateTaskLabelNoTop(R.string.statistics_select_project)
+                            if (projectOptions.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.statistics_no_projects),
+                                    modifier = Modifier.padding(top = 6.dp),
+                                    color = colorResource(R.color.dashboard_text_secondary),
+                                    fontSize = 13.sp
+                                )
+                            } else {
+                                SelectInput(
+                                    selected = selectedProjectLabel.ifBlank { projectOptions.first() },
+                                    values = projectOptions,
+                                    onSelected = { selectedProjectLabel = it }
+                                )
+                            }
+                        }
+                    }
+                }
+                FilledActionButton(
+                    text = stringResource(
+                        if (isExporting) R.string.statistics_exporting else R.string.statistics_export
+                    ),
+                    colorResId = R.color.login_button,
+                    radius = 8.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 24.dp)
+                        .height(50.dp),
+                    onClick = {
+                        if (isExporting) return@FilledActionButton
+                        val hasTarget = when (category) {
+                            StatisticsCategory.USERS -> userOptions.isNotEmpty()
+                            StatisticsCategory.PROJECTS,
+                            StatisticsCategory.PROJECT_TASKS -> projectOptions.isNotEmpty()
+                        }
+                        if (!hasTarget) {
+                            Toast.makeText(context, R.string.statistics_select_target, Toast.LENGTH_LONG).show()
+                            return@FilledActionButton
+                        }
+                        exportReport()
+                    }
+                )
+            }
+        }
+    }
+}
+
+private enum class StatisticsCategory {
+    USERS,
+    PROJECTS,
+    PROJECT_TASKS
+}
+
+@Composable
 fun SettingsScreen() {
     val context = LocalContext.current
     val viewModel = remember { SettingsViewModel() }
     val sessionManager = remember { SessionManager(context.applicationContext) }
+    val canManageProjects = remember { sessionManager.canManageProjects() }
     val authApi = remember { AuthApi() }
     val photoApi = remember { PhotoApi() }
     val userApi = remember { UserApi() }
@@ -3610,6 +3935,34 @@ fun SettingsScreen() {
                     enabled = !isUploadingPhoto,
                     onClick = { photoPickerLauncher.launch("image/*") }
                 )
+            }
+            if (canManageProjects) {
+                SettingsPanel(Modifier.padding(top = 14.dp)) {
+                    Text(
+                        text = stringResource(R.string.statistics_title),
+                        color = colorResource(R.color.dashboard_text_primary),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = stringResource(R.string.statistics_settings_description),
+                        modifier = Modifier.padding(top = 4.dp),
+                        color = colorResource(R.color.dashboard_text_secondary),
+                        fontSize = 14.sp
+                    )
+                    FilledActionButton(
+                        text = stringResource(R.string.statistics_open),
+                        colorResId = R.color.login_button,
+                        radius = 8.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 14.dp)
+                            .height(46.dp),
+                        onClick = {
+                            context.startActivity(Intent(context, StatisticsActivity::class.java))
+                        }
+                    )
+                }
             }
             SettingsPanel(Modifier.padding(top = 14.dp)) {
                 Text(
@@ -4418,7 +4771,6 @@ private fun AdminUserRow(
     modifier: Modifier = Modifier,
     onEdit: () -> Unit,
     onChangePassword: () -> Unit,
-    onExport: () -> Unit,
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -4527,13 +4879,6 @@ private fun AdminUserRow(
                     onClick = {
                         menuExpanded = false
                         onChangePassword()
-                    }
-                )
-                AppDropdownMenuItem(
-                    text = stringResource(R.string.admin_action_export),
-                    onClick = {
-                        menuExpanded = false
-                        onExport()
                     }
                 )
                 if (canDelete) {

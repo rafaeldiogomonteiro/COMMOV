@@ -275,6 +275,7 @@ func (r *TaskRouter) addTimeSpent(w http.ResponseWriter, req *http.Request) {
 		TimeSpent   float64 `json:"timeSpent"`
 		WorkDate    *string `json:"workDate"`
 		Observation *string `json:"observation"`
+		Photo       *string `json:"photo"`
 	}
 	if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -291,6 +292,7 @@ func (r *TaskRouter) addTimeSpent(w http.ResponseWriter, req *http.Request) {
 		TimeSpent:   input.TimeSpent,
 		WorkDate:    workDate,
 		Observation: input.Observation,
+		Photo:       input.Photo,
 	})
 	if err != nil {
 		writeUserServiceError(w, err)

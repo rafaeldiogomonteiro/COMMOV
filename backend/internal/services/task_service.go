@@ -56,6 +56,7 @@ type TaskAddTimeSpentInput struct {
 	TimeSpent   float64
 	WorkDate    *time.Time
 	Observation *string
+	Photo       *string
 }
 
 type TaskService struct {
@@ -385,12 +386,18 @@ func (s *TaskService) AddTimeSpent(ctx context.Context, actorUserID int, taskID 
 		return nil, err
 	}
 
+	photo := ""
+	if input.Photo != nil {
+		photo = strings.TrimSpace(*input.Photo)
+	}
+
 	entry := &entity.TaskTimeEntry{
 		TaskID:      task.TaskID,
 		UserID:      actor.UserID,
 		TimeSpent:   input.TimeSpent,
 		WorkDate:    workDate,
 		Observation: observation,
+		Photo:       photo,
 	}
 	if err := s.TaskTimeEntryRepo.Create(ctx, entry); err != nil {
 		return nil, fmt.Errorf("create task time entry: %w", err)

@@ -129,35 +129,6 @@ class AdminApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
-    fun exportUserReport(token: String, userId: Int): AdminExportResult {
-        val connection = authedConnection("/users/$userId/export", token, "GET").apply {
-            setRequestProperty("Accept", "application/pdf")
-        }
-
-        return try {
-            when (connection.responseCode) {
-                HttpURLConnection.HTTP_OK -> {
-                    val bytes = connection.inputStream.use { it.readBytes() }
-                    val filename = connection.contentDispositionFilename()
-                        ?: "commov-user-$userId-report.pdf"
-                    AdminExportResult.Success(bytes, filename)
-                }
-                HttpURLConnection.HTTP_UNAUTHORIZED -> AdminExportResult.Unauthorized
-                HttpURLConnection.HTTP_FORBIDDEN -> AdminExportResult.Forbidden
-                else -> {
-                    val responseBody = connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    AdminExportResult.ServerError(errorMessage(responseBody))
-                }
-            }
-        } catch (_: IOException) {
-            AdminExportResult.NetworkError
-        } catch (_: Exception) {
-            AdminExportResult.ServerError(null)
-        } finally {
-            connection.disconnect()
-        }
-    }
-
     fun deleteUser(token: String, userId: Int): AdminMutationResult {
         val connection = authedConnection("/users/$userId", token, "DELETE")
 
@@ -216,17 +187,6 @@ class AdminApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             .getOrNull()
     }
 
-    private fun HttpURLConnection.contentDispositionFilename(): String? {
-        val header = getHeaderField("Content-Disposition") ?: return null
-        val filenameMarker = "filename="
-        val startIndex = header.indexOf(filenameMarker, ignoreCase = true)
-        if (startIndex < 0) return null
-        var filename = header.substring(startIndex + filenameMarker.length).trim()
-        if (filename.startsWith("\"") && filename.endsWith("\"")) {
-            filename = filename.substring(1, filename.length - 1)
-        }
-        return filename.takeIf { it.isNotBlank() }
-    }
 }
 
 data class CreateUserInput(
@@ -264,10 +224,3 @@ sealed interface AdminMutationResult {
     data class ServerError(val message: String?) : AdminMutationResult
 }
 
-sealed interface AdminExportResult {
-    data class Success(val bytes: ByteArray, val filename: String) : AdminExportResult
-    data object Unauthorized : AdminExportResult
-    data object Forbidden : AdminExportResult
-    data object NetworkError : AdminExportResult
-    data class ServerError(val message: String?) : AdminExportResult
-}

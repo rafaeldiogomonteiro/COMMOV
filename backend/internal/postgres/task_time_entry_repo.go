@@ -28,6 +28,7 @@ func (r *TaskTimeEntryRepo) ListByTaskID(ctx context.Context, taskID int) ([]ent
 			e.time_spent,
 			e.work_date,
 			COALESCE(e.observation, '') AS observation,
+			COALESCE(e.photo, '') AS photo,
 			e.created_at
 		`).
 		Joins("INNER JOIN users u ON u.user_id = e.user_id").

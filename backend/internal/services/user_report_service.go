@@ -18,6 +18,7 @@ import (
 type UserReportService struct {
 	UserRepo          *postgres.UserRepo
 	ProjectRepo       *postgres.ProjectRepo
+	ProjectUserRepo   *postgres.ProjectUserRepo
 	TaskRepo          *postgres.TaskRepo
 	TaskTimeEntryRepo *postgres.TaskTimeEntryRepo
 	AuthService       *AuthService
@@ -41,8 +42,37 @@ type UserReport struct {
 	AvgCompletionRate float64
 }
 
+type ProjectReport struct {
+	Project           entity.Project
+	GeneratedAt       time.Time
+	Manager           *entity.User
+	Members           []entity.User
+	Tasks             []entity.Task
+	TotalTasks        int
+	PendingTasks      int
+	InProgressTasks   int
+	CompletedTasks    int
+	BlockedTasks      int
+	TotalTaskTime     float64
+	TotalEstimated    float64
+	AvgCompletionRate float64
+}
+
+func (s *UserReportService) ListUsers(ctx context.Context, actorUserID int) ([]entity.User, error) {
+	if _, err := actorWithManagementRole(ctx, s.UserRepo, actorUserID); err != nil {
+		return nil, err
+	}
+
+	users, err := s.UserRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list users: %w", err)
+	}
+
+	return users, nil
+}
+
 func (s *UserReportService) BuildReport(ctx context.Context, actorUserID int, userID int) (*UserReport, error) {
-	if err := s.ensureAdmin(ctx, actorUserID); err != nil {
+	if _, err := actorWithManagementRole(ctx, s.UserRepo, actorUserID); err != nil {
 		return nil, err
 	}
 	if userID <= 0 {
@@ -134,18 +164,119 @@ func (s *UserReportService) ExportPDF(ctx context.Context, actorUserID int, user
 	return pdfBytes, filename, nil
 }
 
-func (s *UserReportService) ensureAdmin(ctx context.Context, actorUserID int) error {
-	user, err := s.UserRepo.GetByID(ctx, actorUserID)
+func (s *UserReportService) BuildProjectReport(ctx context.Context, actorUserID int, projectID int) (*ProjectReport, error) {
+	if _, err := actorWithManagementRole(ctx, s.UserRepo, actorUserID); err != nil {
+		return nil, err
+	}
+	if projectID <= 0 {
+		return nil, validationError("projectId is invalid")
+	}
+
+	project, err := s.ProjectRepo.GetByID(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrUnauthorized
+			return nil, notFoundError("project not found")
 		}
-		return fmt.Errorf("get actor: %w", err)
+		return nil, fmt.Errorf("get project: %w", err)
 	}
-	if user.Role != entity.UserRoleAdmin {
-		return ErrForbidden
+
+	manager, err := s.UserRepo.GetByID(ctx, project.ManagerID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("get manager: %w", err)
 	}
-	return nil
+
+	projectUsers, err := s.ProjectUserRepo.ListByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project members: %w", err)
+	}
+
+	members := make([]entity.User, 0, len(projectUsers))
+	for _, projectUser := range projectUsers {
+		user, err := s.UserRepo.GetByID(ctx, projectUser.UserID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return nil, fmt.Errorf("get project member: %w", err)
+		}
+		members = append(members, *user)
+	}
+
+	tasks, err := s.TaskRepo.ListByProjectID(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project tasks: %w", err)
+	}
+
+	report := &ProjectReport{
+		Project:     *project,
+		GeneratedAt: time.Now().UTC(),
+		Manager:     manager,
+		Members:     members,
+		Tasks:       tasks,
+		TotalTasks:  len(tasks),
+	}
+
+	for _, task := range tasks {
+		switch strings.ToLower(strings.TrimSpace(task.Status)) {
+		case entity.TaskStatusPending:
+			report.PendingTasks++
+		case entity.TaskStatusInProgress:
+			report.InProgressTasks++
+		case entity.TaskStatusCompleted:
+			report.CompletedTasks++
+		case entity.TaskStatusBlocked:
+			report.BlockedTasks++
+		}
+		report.TotalTaskTime += task.TimeSpent
+		report.TotalEstimated += task.EstimatedTime
+		report.AvgCompletionRate += task.CompletionRate
+	}
+
+	if report.TotalTasks > 0 {
+		report.AvgCompletionRate = report.AvgCompletionRate / float64(report.TotalTasks)
+	}
+
+	return report, nil
+}
+
+func (s *UserReportService) ExportProjectPDF(ctx context.Context, actorUserID int, projectID int) ([]byte, string, error) {
+	report, err := s.BuildProjectReport(ctx, actorUserID, projectID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	pdfBytes, err := renderProjectReportPDF(report)
+	if err != nil {
+		return nil, "", fmt.Errorf("render pdf: %w", err)
+	}
+
+	safeName := sanitizeFilename(report.Project.Name)
+	if safeName == "" {
+		safeName = fmt.Sprintf("project-%d", report.Project.ProjectID)
+	}
+	filename := fmt.Sprintf("commov-project-%s-report.pdf", safeName)
+
+	return pdfBytes, filename, nil
+}
+
+func (s *UserReportService) ExportProjectTasksPDF(ctx context.Context, actorUserID int, projectID int) ([]byte, string, error) {
+	report, err := s.BuildProjectReport(ctx, actorUserID, projectID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	pdfBytes, err := renderProjectTasksReportPDF(report, s.UserRepo, ctx)
+	if err != nil {
+		return nil, "", fmt.Errorf("render pdf: %w", err)
+	}
+
+	safeName := sanitizeFilename(report.Project.Name)
+	if safeName == "" {
+		safeName = fmt.Sprintf("project-%d", report.Project.ProjectID)
+	}
+	filename := fmt.Sprintf("commov-project-%s-tasks-report.pdf", safeName)
+
+	return pdfBytes, filename, nil
 }
 
 func renderUserReportPDF(report *UserReport) ([]byte, error) {
@@ -279,6 +410,174 @@ func renderUserReportPDF(report *UserReport) ([]byte, error) {
 			pdf.SetTextColor(muted[0], muted[1], muted[2])
 			pdf.CellFormat(0, 6, fmt.Sprintf("Showing 25 of %d time entries.", len(report.TimeEntries)), "", 1, "L", false, 0, "")
 		}
+	}
+
+	var buffer bytes.Buffer
+	if err := pdf.Output(&buffer); err != nil {
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func renderProjectReportPDF(report *ProjectReport) ([]byte, error) {
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.AddPage()
+
+	primary := []int{37, 99, 235}
+	muted := []int{100, 116, 139}
+
+	pdf.SetFont("Helvetica", "B", 20)
+	pdf.SetTextColor(primary[0], primary[1], primary[2])
+	pdf.CellFormat(0, 12, "ComMov Project Statistics Report", "", 1, "L", false, 0, "")
+
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetTextColor(muted[0], muted[1], muted[2])
+	pdf.CellFormat(0, 6, fmt.Sprintf("Generated: %s UTC", report.GeneratedAt.Format("2006-01-02 15:04")), "", 1, "L", false, 0, "")
+	pdf.Ln(4)
+
+	sectionTitle(pdf, "Project", primary)
+	managerName := "—"
+	if report.Manager != nil {
+		managerName = report.Manager.Name
+	}
+	actualEnd := "—"
+	if report.Project.ActualEndDate != nil {
+		actualEnd = report.Project.ActualEndDate.Format("2006-01-02")
+	}
+	projectRows := [][]string{
+		{"Name", report.Project.Name},
+		{"Description", truncate(report.Project.Description, 120)},
+		{"Status", report.Project.Status},
+		{"Manager", managerName},
+		{"Project ID", fmt.Sprintf("%d", report.Project.ProjectID)},
+		{"Start date", report.Project.StartDate.Format("2006-01-02")},
+		{"Estimated end", report.Project.EstimatedEndDate.Format("2006-01-02")},
+		{"Actual end", actualEnd},
+	}
+	keyValueTable(pdf, projectRows)
+
+	sectionTitle(pdf, "Task Summary", primary)
+	summaryRows := [][]string{
+		{"Total tasks", fmt.Sprintf("%d", report.TotalTasks)},
+		{"Pending tasks", fmt.Sprintf("%d", report.PendingTasks)},
+		{"In progress tasks", fmt.Sprintf("%d", report.InProgressTasks)},
+		{"Completed tasks", fmt.Sprintf("%d", report.CompletedTasks)},
+		{"Blocked tasks", fmt.Sprintf("%d", report.BlockedTasks)},
+		{"Avg. completion rate", fmt.Sprintf("%.1f%%", report.AvgCompletionRate)},
+		{"Total estimated time", formatHours(report.TotalEstimated)},
+		{"Total time spent", formatHours(report.TotalTaskTime)},
+		{"Members", fmt.Sprintf("%d", len(report.Members))},
+	}
+	keyValueTable(pdf, summaryRows)
+
+	if len(report.Members) > 0 {
+		sectionTitle(pdf, "Members", primary)
+		memberHeaders := []string{"ID", "Name", "Role", "Status"}
+		memberRows := make([][]string, 0, len(report.Members))
+		for _, member := range report.Members {
+			memberRows = append(memberRows, []string{
+				fmt.Sprintf("%d", member.UserID),
+				truncate(member.Name, 28),
+				formatRole(string(member.Role)),
+				formatActive(member.Active),
+			})
+		}
+		dataTable(pdf, memberHeaders, memberRows)
+	}
+
+	if len(report.Tasks) > 0 {
+		sectionTitle(pdf, "Tasks Overview", primary)
+		taskHeaders := []string{"ID", "Title", "Status", "Completion", "Spent", "Est."}
+		taskRows := make([][]string, 0, len(report.Tasks))
+		for _, task := range report.Tasks {
+			taskRows = append(taskRows, []string{
+				fmt.Sprintf("%d", task.TaskID),
+				truncate(task.Title, 30),
+				task.Status,
+				fmt.Sprintf("%.0f%%", task.CompletionRate),
+				formatHours(task.TimeSpent),
+				formatHours(task.EstimatedTime),
+			})
+		}
+		dataTable(pdf, taskHeaders, taskRows)
+	}
+
+	var buffer bytes.Buffer
+	if err := pdf.Output(&buffer); err != nil {
+		return nil, err
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func renderProjectTasksReportPDF(report *ProjectReport, userRepo *postgres.UserRepo, ctx context.Context) ([]byte, error) {
+	pdf := fpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.AddPage()
+
+	primary := []int{37, 99, 235}
+	muted := []int{100, 116, 139}
+
+	pdf.SetFont("Helvetica", "B", 20)
+	pdf.SetTextColor(primary[0], primary[1], primary[2])
+	pdf.CellFormat(0, 12, "ComMov Project Tasks Report", "", 1, "L", false, 0, "")
+
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.SetTextColor(muted[0], muted[1], muted[2])
+	pdf.CellFormat(0, 6, fmt.Sprintf("Project: %s", report.Project.Name), "", 1, "L", false, 0, "")
+	pdf.CellFormat(0, 6, fmt.Sprintf("Generated: %s UTC", report.GeneratedAt.Format("2006-01-02 15:04")), "", 1, "L", false, 0, "")
+	pdf.Ln(4)
+
+	sectionTitle(pdf, "Summary", primary)
+	summaryRows := [][]string{
+		{"Total tasks", fmt.Sprintf("%d", report.TotalTasks)},
+		{"Pending", fmt.Sprintf("%d", report.PendingTasks)},
+		{"In progress", fmt.Sprintf("%d", report.InProgressTasks)},
+		{"Completed", fmt.Sprintf("%d", report.CompletedTasks)},
+		{"Blocked", fmt.Sprintf("%d", report.BlockedTasks)},
+		{"Total estimated time", formatHours(report.TotalEstimated)},
+		{"Total time spent", formatHours(report.TotalTaskTime)},
+	}
+	keyValueTable(pdf, summaryRows)
+
+	if len(report.Tasks) == 0 {
+		sectionTitle(pdf, "Tasks", primary)
+		pdf.SetFont("Helvetica", "", 9)
+		pdf.SetTextColor(muted[0], muted[1], muted[2])
+		pdf.CellFormat(0, 6, "No tasks found for this project.", "", 1, "L", false, 0, "")
+	} else {
+		assigneeNames := map[int]string{}
+		for _, task := range report.Tasks {
+			if _, ok := assigneeNames[task.UserID]; ok {
+				continue
+			}
+			user, err := userRepo.GetByID(ctx, task.UserID)
+			if err != nil || user == nil {
+				assigneeNames[task.UserID] = fmt.Sprintf("User #%d", task.UserID)
+				continue
+			}
+			assigneeNames[task.UserID] = user.Name
+		}
+
+		sectionTitle(pdf, "Tasks", primary)
+		taskHeaders := []string{"ID", "Title", "Assignee", "Status", "Completion", "Spent", "Est."}
+		taskRows := make([][]string, 0, len(report.Tasks))
+		for _, task := range report.Tasks {
+			taskRows = append(taskRows, []string{
+				fmt.Sprintf("%d", task.TaskID),
+				truncate(task.Title, 24),
+				truncate(assigneeNames[task.UserID], 18),
+				task.Status,
+				fmt.Sprintf("%.0f%%", task.CompletionRate),
+				formatHours(task.TimeSpent),
+				formatHours(task.EstimatedTime),
+			})
+		}
+		dataTable(pdf, taskHeaders, taskRows)
 	}
 
 	var buffer bytes.Buffer

@@ -37,6 +37,7 @@ func main() {
 	userReportService := &services.UserReportService{
 		UserRepo:          userRepo,
 		ProjectRepo:       projectRepo,
+		ProjectUserRepo:   projectUserRepo,
 		TaskRepo:          taskRepo,
 		TaskTimeEntryRepo: taskTimeEntryRepo,
 		AuthService:       authService,
@@ -62,19 +63,23 @@ func main() {
 
 	authRouter := &router.AuthRouter{AuthService: authService, UserService: userService}
 	userRouter := &router.UserRouter{
-		UserService:       userService,
-		UserReportService: userReportService,
-		AuthService:       authService,
+		UserService: userService,
+		AuthService: authService,
 	}
 	projectRouter := &router.ProjectRouter{ProjectService: projectService, AuthService: authService}
 	taskRouter := &router.TaskRouter{TaskService: taskService, AuthService: authService}
+	statisticsRouter := &router.StatisticsRouter{
+		UserReportService: userReportService,
+		AuthService:       authService,
+	}
 
 	appRouter := router.NewRouter(router.Dependencies{
-		Logger:        appLogger,
-		AuthRouter:    authRouter,
-		UserRouter:    userRouter,
-		ProjectRouter: projectRouter,
-		TaskRouter:    taskRouter,
+		Logger:           appLogger,
+		AuthRouter:       authRouter,
+		UserRouter:       userRouter,
+		ProjectRouter:    projectRouter,
+		TaskRouter:       taskRouter,
+		StatisticsRouter: statisticsRouter,
 	})
 
 	appLogger.Printf("server listening on %s", cfg.HTTPAddr)

@@ -9,6 +9,7 @@ type TaskTimeEntry struct {
 	TimeSpent   float64   `json:"timeSpent" gorm:"column:time_spent;not null"`
 	WorkDate    time.Time `json:"workDate" gorm:"column:work_date;type:date;not null"`
 	Observation string    `json:"observation" gorm:"type:text;not null;default:''"`
+	Photo       string    `json:"photo" gorm:"type:text;not null;default:''"`
 	CreatedAt   time.Time `json:"createdAt" gorm:"column:created_at;not null;autoCreateTime"`
 }
 
@@ -25,5 +26,6 @@ type TaskTimeEntryView struct {
 	TimeSpent   float64   `json:"timeSpent" gorm:"column:time_spent"`
 	WorkDate    time.Time `json:"workDate" gorm:"column:work_date"`
 	Observation string    `json:"observation" gorm:"column:observation"`
+	Photo       string    `json:"photo" gorm:"column:photo"`
 	CreatedAt   time.Time `json:"createdAt" gorm:"column:created_at"`
 }

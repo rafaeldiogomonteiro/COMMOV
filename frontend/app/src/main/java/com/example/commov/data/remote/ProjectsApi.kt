@@ -8,6 +8,15 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class ProjectsApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
+    fun listProjects(token: String): ProjectsResult {
+        return when (val projectsResult = getArray("/projects", token)) {
+            is RemoteArrayResult.Success -> ProjectsResult.Success(parseProjects(projectsResult.array))
+            RemoteArrayResult.Unauthorized -> ProjectsResult.Unauthorized
+            RemoteArrayResult.NetworkError -> ProjectsResult.NetworkError
+            is RemoteArrayResult.ServerError -> ProjectsResult.ServerError(projectsResult.message)
+        }
+    }
+
     fun projects(token: String): ProjectsResult {
         val projectsResult = getArray("/projects", token)
         if (projectsResult !is RemoteArrayResult.Success) {

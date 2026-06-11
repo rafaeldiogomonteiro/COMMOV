@@ -26,11 +26,21 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
-    fun addTimeSpent(token: String, taskId: Int, timeSpent: Double, workDate: String, observation: String): TaskMutationResult {
+    fun addTimeSpent(
+        token: String,
+        taskId: Int,
+        timeSpent: Double,
+        workDate: String,
+        observation: String,
+        photo: String? = null
+    ): TaskMutationResult {
         val body = JSONObject()
             .put("timeSpent", timeSpent)
             .put("workDate", workDate)
             .put("observation", observation)
+        if (!photo.isNullOrBlank()) {
+            body.put("photo", photo)
+        }
         return sendJson(token, "/tasks/$taskId/time-spent", "POST", body)
     }
 
@@ -154,6 +164,7 @@ class TaskApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             timeSpent = json.optDouble("timeSpent", 0.0),
             workDate = json.optNullableString("workDate"),
             observation = json.optString("observation"),
+            photo = json.optString("photo"),
             createdAt = json.optNullableString("createdAt")
         )
     }
@@ -197,6 +208,7 @@ data class ApiTaskTimeEntry(
     val timeSpent: Double,
     val workDate: String?,
     val observation: String,
+    val photo: String,
     val createdAt: String?
 )
 
