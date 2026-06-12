@@ -652,14 +652,12 @@ fun ProjectsScreen() {
                     color = colorResource(R.color.dashboard_text_secondary),
                     fontSize = 15.sp
                 )
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (project == null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     if (state.canCreateTasks) {
                         FilledActionButton(
                             text = stringResource(R.string.project_create_project),
@@ -694,8 +692,9 @@ fun ProjectsScreen() {
                             onClick = { selectedProjectId = item.projectId }
                         )
                     }
-                } else {
-                    ProjectDetailView(
+                }
+            } else {
+                ProjectDetailView(
                         project = project,
                         canManage = canManage,
                         canCreateTasks = state.canCreateTasks,
@@ -758,7 +757,6 @@ fun ProjectsScreen() {
                             }.start()
                         }
                     )
-                }
             }
         }
         }
