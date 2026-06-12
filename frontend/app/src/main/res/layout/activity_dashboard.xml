@@ -61,7 +61,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:letterSpacing="0.08"
-                            android:text="@string/dashboard_pending_tasks"
+                            android:text="@string/dashboard_todo_tasks"
                             android:textAllCaps="true"
                             android:textColor="@color/dashboard_text_secondary"
                             android:textSize="12sp"
@@ -81,7 +81,7 @@
                         android:orientation="vertical">
 
                         <TextView
-                            android:id="@+id/pendingCountText"
+                            android:id="@+id/todoCountText"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:textColor="@color/dashboard_text_primary"
@@ -90,7 +90,7 @@
                     </LinearLayout>
 
                     <ProgressBar
-                        android:id="@+id/pendingProgress"
+                        android:id="@+id/todoProgress"
                         style="?android:attr/progressBarStyleHorizontal"
                         android:layout_width="match_parent"
                         android:layout_height="8dp"

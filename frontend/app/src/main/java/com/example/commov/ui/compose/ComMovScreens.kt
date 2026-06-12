@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -142,6 +143,7 @@ import com.example.commov.model.DashboardTask
 import com.example.commov.model.Project
 import com.example.commov.model.ProjectMember
 import com.example.commov.model.ProjectTask
+import com.example.commov.model.Status
 import com.example.commov.ui.admin.AdminActivity
 import com.example.commov.ui.dashboard.DashboardActivity
 import com.example.commov.ui.intro.IntroActivity
@@ -423,12 +425,10 @@ fun DashboardScreen() {
         mutableStateOf(
             DashboardUiState(
                 userName = "",
-                pendingTasks = 0,
+                todoTasks = 0,
                 completedTasks = 0,
-                pendingProgress = 0,
+                todoProgress = 0,
                 completedProgress = 0,
-                inProgressCount = 0,
-                blockedCount = 0,
                 tasks = emptyList(),
                 overdueTasks = emptyList(),
                 todayTasks = emptyList(),
@@ -503,19 +503,9 @@ fun DashboardScreen() {
                         userName = state.userName.ifBlank {
                             sessionManager.currentUser()?.name?.trim().orEmpty()
                         }.ifBlank { "…" },
-                        openTasksCount = state.pendingTasks,
+                        openTasksCount = state.todoTasks,
                         profileMember = profileMember
                     )
-                    if (state.canManageProjects) {
-                        DashboardQuickActions(
-                            onCreateTask = {
-                                context.startActivity(Intent(context, ProjectsActivity::class.java))
-                            },
-                            onCreateProject = {
-                                context.startActivity(Intent(context, CreateProjectActivity::class.java))
-                            }
-                        )
-                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -523,9 +513,9 @@ fun DashboardScreen() {
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         DashboardSummaryCard(
-                            titleResId = R.string.dashboard_pending_tasks,
-                            count = state.pendingTasks,
-                            progress = state.pendingProgress,
+                            titleResId = R.string.dashboard_todo_tasks,
+                            count = state.todoTasks,
+                            progress = state.todoProgress,
                             iconResId = R.drawable.ic_clock,
                             progressColorResId = R.color.task_red,
                             iconBackgroundColorResId = R.color.task_red_soft,
@@ -538,27 +528,6 @@ fun DashboardScreen() {
                             iconResId = R.drawable.ic_check_circle,
                             progressColorResId = R.color.project_green,
                             iconBackgroundColorResId = R.color.project_green_soft,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        DashboardMetricChip(
-                            labelResId = R.string.dashboard_in_progress,
-                            count = state.inProgressCount,
-                            accentColorResId = R.color.task_orange,
-                            backgroundColorResId = R.color.task_orange_soft,
-                            modifier = Modifier.weight(1f)
-                        )
-                        DashboardMetricChip(
-                            labelResId = R.string.dashboard_blocked,
-                            count = state.blockedCount,
-                            accentColorResId = R.color.task_red,
-                            backgroundColorResId = R.color.task_red_soft,
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -754,77 +723,6 @@ private fun DashboardHeader(
                 fontWeight = FontWeight.Medium
             )
         }
-    }
-}
-
-@Composable
-private fun DashboardQuickActions(
-    onCreateTask: () -> Unit,
-    onCreateProject: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        OutlinedActionButton(
-            text = stringResource(R.string.dashboard_create_task),
-            modifier = Modifier
-                .weight(1f)
-                .height(44.dp),
-            onClick = onCreateTask
-        )
-        FilledActionButton(
-            text = stringResource(R.string.dashboard_create_project),
-            colorResId = R.color.login_button,
-            radius = 6.dp,
-            modifier = Modifier
-                .weight(1f)
-                .height(44.dp),
-            onClick = onCreateProject
-        )
-    }
-}
-
-@Composable
-private fun DashboardMetricChip(
-    @StringRes labelResId: Int,
-    count: Int,
-    @ColorRes accentColorResId: Int,
-    @ColorRes backgroundColorResId: Int,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        modifier = modifier
-            .height(44.dp)
-            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(colorResource(accentColorResId))
-        )
-        Text(
-            text = stringResource(labelResId),
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 8.dp),
-            color = colorResource(R.color.dashboard_text_secondary),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-        Text(
-            text = count.toString(),
-            color = colorResource(accentColorResId),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
 
@@ -1735,7 +1633,7 @@ private fun ProjectTaskListItem(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        StatusPill(status = task.statusText ?: "pending")
+        StatusPill(status = task.statusText ?: Status.TASK_TODO)
         if (projectTask.assignees.isNotEmpty()) {
             AvatarStack(
                 members = projectTask.assignees,
@@ -1819,8 +1717,8 @@ private fun StatusPill(
         colorResource(
             when (normalized) {
                 "completed", "done" -> R.color.project_green_soft
-                "blocked", "cancelled", "on_hold" -> R.color.task_red_soft
-                "in_progress", "active", "pending" -> R.color.task_blue_soft
+                "cancelled", "on_hold" -> R.color.task_red_soft
+                "todo", "active" -> R.color.task_blue_soft
                 else -> R.color.task_status_gray_bg
             }
         )
@@ -1831,8 +1729,8 @@ private fun StatusPill(
         colorResource(
             when (normalized) {
                 "completed", "done" -> R.color.project_green
-                "blocked", "cancelled", "on_hold" -> R.color.task_red
-                "in_progress", "active" -> R.color.bottom_nav_selected
+                "cancelled", "on_hold" -> R.color.task_red
+                "todo", "active" -> R.color.bottom_nav_selected
                 else -> R.color.task_status_gray_text
             }
         )
@@ -3177,7 +3075,7 @@ fun TaskDetailScreen(taskId: Int) {
                 TaskDetailScreenSkeleton()
             } else {
             StatusPill(
-                status = task?.status ?: "pending",
+                status = task?.status ?: Status.TASK_TODO,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
 
@@ -5366,11 +5264,9 @@ private fun roleLabel(role: String): String {
 
 @Composable
 private fun taskStatusLabel(statusKey: String?): String {
-    return when (statusKey?.lowercase(Locale.getDefault())) {
-        "completed" -> stringResource(R.string.task_status_completed)
-        "blocked" -> stringResource(R.string.task_status_blocked)
-        "in_progress" -> stringResource(R.string.task_status_in_progress)
-        else -> stringResource(R.string.task_status_pending)
+    return when (Status.normalizeTaskStatus(statusKey.orEmpty())) {
+        Status.TASK_COMPLETED -> stringResource(R.string.task_status_completed)
+        else -> stringResource(R.string.task_status_todo)
     }
 }
 

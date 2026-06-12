@@ -5,12 +5,10 @@ import com.example.commov.model.Project
 
 data class DashboardUiState(
     val userName: String,
-    val pendingTasks: Int,
+    val todoTasks: Int,
     val completedTasks: Int,
-    val pendingProgress: Int,
+    val todoProgress: Int,
     val completedProgress: Int,
-    val inProgressCount: Int,
-    val blockedCount: Int,
     val tasks: List<DashboardTask>,
     val overdueTasks: List<DashboardTask>,
     val todayTasks: List<DashboardTask>,

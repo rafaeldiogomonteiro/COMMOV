@@ -9,7 +9,7 @@ import com.example.commov.data.remote.CheckLoginResult
 import com.example.commov.data.remote.DashboardApi
 import com.example.commov.data.remote.DashboardResult
 import com.example.commov.model.DashboardTask
-import java.util.Locale
+import com.example.commov.model.Status
 
 class DashboardViewModel(
     context: Context,
@@ -115,12 +115,10 @@ class DashboardViewModel(
         }
 
         return state.copy(
-            pendingTasks = openTasks.size,
-            completedTasks = result.tasks.count { it.status.equals("completed", ignoreCase = true) },
-            pendingProgress = result.tasks.percent { !it.status.equals("completed", ignoreCase = true) },
-            completedProgress = result.tasks.percent { it.status.equals("completed", ignoreCase = true) },
-            inProgressCount = openTasks.count { it.status.equals("in_progress", ignoreCase = true) },
-            blockedCount = openTasks.count { it.status.equals("blocked", ignoreCase = true) },
+            todoTasks = openTasks.size,
+            completedTasks = result.tasks.count { Status.isTaskCompleted(it.status) },
+            todoProgress = result.tasks.percent { !Status.isTaskCompleted(it.status) },
+            completedProgress = result.tasks.percent { Status.isTaskCompleted(it.status) },
             tasks = openTasks
                 .sortedWith(compareBy<com.example.commov.data.remote.ApiTask> { it.estimatedEndDate == null }.thenBy { it.estimatedEndDate })
                 .take(4)
@@ -143,12 +141,10 @@ class DashboardViewModel(
     private fun emptyState(userName: String): DashboardUiState {
         return DashboardUiState(
             userName = userName,
-            pendingTasks = 0,
+            todoTasks = 0,
             completedTasks = 0,
-            pendingProgress = 0,
+            todoProgress = 0,
             completedProgress = 0,
-            inProgressCount = 0,
-            blockedCount = 0,
             tasks = emptyList(),
             overdueTasks = emptyList(),
             todayTasks = emptyList(),

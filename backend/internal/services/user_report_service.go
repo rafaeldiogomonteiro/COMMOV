@@ -33,10 +33,8 @@ type UserReport struct {
 	Tasks             []entity.Task
 	TimeEntries       []entity.TaskTimeEntry
 	TotalTasks        int
-	PendingTasks      int
-	InProgressTasks   int
+	TodoTasks         int
 	CompletedTasks    int
-	BlockedTasks      int
 	TotalTaskTime     float64
 	TotalEntryTime    float64
 	TotalEstimated    float64
@@ -50,10 +48,8 @@ type ProjectReport struct {
 	Members           []entity.User
 	Tasks             []entity.Task
 	TotalTasks        int
-	PendingTasks      int
-	InProgressTasks   int
+	TodoTasks         int
 	CompletedTasks    int
-	BlockedTasks      int
 	TotalTaskTime     float64
 	TotalEstimated    float64
 	AvgCompletionRate float64
@@ -119,15 +115,12 @@ func (s *UserReportService) BuildReport(ctx context.Context, actorUserID int, us
 	}
 
 	for _, task := range tasks {
-		switch strings.ToLower(strings.TrimSpace(task.Status)) {
-		case entity.TaskStatusPending:
-			report.PendingTasks++
-		case entity.TaskStatusInProgress:
-			report.InProgressTasks++
+		status, _ := entity.NormalizeTaskStatus(task.Status)
+		switch status {
 		case entity.TaskStatusCompleted:
 			report.CompletedTasks++
-		case entity.TaskStatusBlocked:
-			report.BlockedTasks++
+		default:
+			report.TodoTasks++
 		}
 		report.TotalTaskTime += task.TimeSpent
 		report.TotalEstimated += task.EstimatedTime
@@ -218,15 +211,12 @@ func (s *UserReportService) BuildProjectReport(ctx context.Context, actorUserID 
 	}
 
 	for _, task := range tasks {
-		switch strings.ToLower(strings.TrimSpace(task.Status)) {
-		case entity.TaskStatusPending:
-			report.PendingTasks++
-		case entity.TaskStatusInProgress:
-			report.InProgressTasks++
+		status, _ := entity.NormalizeTaskStatus(task.Status)
+		switch status {
 		case entity.TaskStatusCompleted:
 			report.CompletedTasks++
-		case entity.TaskStatusBlocked:
-			report.BlockedTasks++
+		default:
+			report.TodoTasks++
 		}
 		report.TotalTaskTime += task.TimeSpent
 		report.TotalEstimated += task.EstimatedTime
@@ -314,10 +304,8 @@ func renderUserReportPDF(report *UserReport) ([]byte, error) {
 		{"Projects (member)", fmt.Sprintf("%d", len(report.MemberProjects))},
 		{"Projects (managed)", fmt.Sprintf("%d", len(report.ManagedProjects))},
 		{"Total tasks assigned", fmt.Sprintf("%d", report.TotalTasks)},
-		{"Pending tasks", fmt.Sprintf("%d", report.PendingTasks)},
-		{"In progress tasks", fmt.Sprintf("%d", report.InProgressTasks)},
+		{"Todo tasks", fmt.Sprintf("%d", report.TodoTasks)},
 		{"Completed tasks", fmt.Sprintf("%d", report.CompletedTasks)},
-		{"Blocked tasks", fmt.Sprintf("%d", report.BlockedTasks)},
 		{"Avg. completion rate", fmt.Sprintf("%.1f%%", report.AvgCompletionRate)},
 		{"Total estimated time", formatHours(report.TotalEstimated)},
 		{"Total time on tasks", formatHours(report.TotalTaskTime)},
@@ -463,10 +451,8 @@ func renderProjectReportPDF(report *ProjectReport) ([]byte, error) {
 	sectionTitle(pdf, "Task Summary", primary)
 	summaryRows := [][]string{
 		{"Total tasks", fmt.Sprintf("%d", report.TotalTasks)},
-		{"Pending tasks", fmt.Sprintf("%d", report.PendingTasks)},
-		{"In progress tasks", fmt.Sprintf("%d", report.InProgressTasks)},
+		{"Todo tasks", fmt.Sprintf("%d", report.TodoTasks)},
 		{"Completed tasks", fmt.Sprintf("%d", report.CompletedTasks)},
-		{"Blocked tasks", fmt.Sprintf("%d", report.BlockedTasks)},
 		{"Avg. completion rate", fmt.Sprintf("%.1f%%", report.AvgCompletionRate)},
 		{"Total estimated time", formatHours(report.TotalEstimated)},
 		{"Total time spent", formatHours(report.TotalTaskTime)},
@@ -541,10 +527,8 @@ func renderProjectTasksReportPDF(
 	sectionTitle(pdf, "Summary", primary)
 	summaryRows := [][]string{
 		{"Total tasks", fmt.Sprintf("%d", report.TotalTasks)},
-		{"Pending", fmt.Sprintf("%d", report.PendingTasks)},
-		{"In progress", fmt.Sprintf("%d", report.InProgressTasks)},
+		{"Todo", fmt.Sprintf("%d", report.TodoTasks)},
 		{"Completed", fmt.Sprintf("%d", report.CompletedTasks)},
-		{"Blocked", fmt.Sprintf("%d", report.BlockedTasks)},
 		{"Total estimated time", formatHours(report.TotalEstimated)},
 		{"Total time spent", formatHours(report.TotalTaskTime)},
 	}

@@ -37,7 +37,7 @@
     <string name="nav_admin">Admin</string>
     <string name="nav_settings">Definições</string>
     <string name="dashboard_greeting">Olá, %1$s</string>
-    <string name="dashboard_pending_tasks">Pendentes</string>
+    <string name="dashboard_todo_tasks">A fazer</string>
     <string name="dashboard_completed_tasks">Concluídas</string>
     <string name="dashboard_my_tasks">Tarefas abertas</string>
     <string name="dashboard_see_all">Ver todas</string>
@@ -51,17 +51,13 @@
     <string name="dashboard_this_week">Esta semana</string>
     <string name="dashboard_hours_this_week">%1$sh registadas esta semana</string>
     <string name="dashboard_over_estimate">%1$d acima do estimado</string>
-    <string name="dashboard_in_progress">Em progresso</string>
-    <string name="dashboard_blocked">Bloqueadas</string>
     <string name="dashboard_view_projects">Ver projetos</string>
     <string name="dashboard_create_task">Criar tarefa</string>
     <string name="dashboard_create_project">Criar projeto</string>
     <string name="all_tasks_title">Todas as tarefas</string>
     <string name="all_tasks_subtitle">Tarefas abertas nos seus projetos</string>
     <string name="all_tasks_empty">Sem tarefas abertas.</string>
-    <string name="task_status_pending">Pendente</string>
-    <string name="task_status_in_progress">Em curso</string>
-    <string name="task_status_blocked">Bloqueada</string>
+    <string name="task_status_todo">A fazer</string>
     <string name="task_status_completed">Concluída</string>
     <string name="projects_title">Projetos</string>
     <string name="projects_subtitle">Projetos onde participa</string>

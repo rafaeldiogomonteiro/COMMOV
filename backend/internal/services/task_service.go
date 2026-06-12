@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultTaskStatus   = entity.TaskStatusPending
+	defaultTaskStatus   = entity.TaskStatusTodo
 	completedTaskStatus = entity.TaskStatusCompleted
 )
 

@@ -4,9 +4,9 @@ import "testing"
 
 func TestNormalizeProjectStatus(t *testing.T) {
 	tests := []struct {
-		input   string
-		want    string
-		wantOK  bool
+		input  string
+		want   string
+		wantOK bool
 	}{
 		{"active", ProjectStatusActive, true},
 		{"ACTIVE", ProjectStatusActive, true},
@@ -59,11 +59,12 @@ func TestNormalizeTaskStatus(t *testing.T) {
 		want   string
 		wantOK bool
 	}{
-		{"pending", TaskStatusPending, true},
-		{"In_Progress", TaskStatusInProgress, true},
+		{"todo", TaskStatusTodo, true},
+		{"pending", TaskStatusTodo, true},
+		{"In_Progress", TaskStatusTodo, true},
 		{"completed", TaskStatusCompleted, true},
-		{"blocked", TaskStatusBlocked, true},
-		{"", TaskStatusPending, true},
+		{"blocked", TaskStatusTodo, true},
+		{"", TaskStatusTodo, true},
 		{"done", "", false},
 	}
 

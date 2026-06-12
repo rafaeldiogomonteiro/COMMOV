@@ -6,6 +6,7 @@ object Status {
     const val PROJECT_ON_HOLD = "on_hold"
     const val PROJECT_CANCELLED = "cancelled"
 
+    const val TASK_TODO = "todo"
     const val TASK_COMPLETED = "completed"
 
     private val validProjectStatuses = setOf(
@@ -22,6 +23,10 @@ object Status {
 
     fun isTaskCompleted(raw: String): Boolean {
         return raw.trim().equals(TASK_COMPLETED, ignoreCase = true)
+    }
+
+    fun normalizeTaskStatus(raw: String): String {
+        return if (isTaskCompleted(raw)) TASK_COMPLETED else TASK_TODO
     }
 
     fun formatTaskMeta(projectName: String, estimatedEndDate: String?): String {

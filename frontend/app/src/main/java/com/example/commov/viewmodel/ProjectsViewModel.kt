@@ -14,6 +14,7 @@ import com.example.commov.model.DashboardTask
 import com.example.commov.model.Project
 import com.example.commov.model.ProjectMember
 import com.example.commov.model.ProjectTask
+import com.example.commov.model.Status
 import java.util.Locale
 
 class ProjectsViewModel(
@@ -143,34 +144,18 @@ class ProjectsViewModel(
     }
 
     private fun ApiTask.toDashboardTask(projectName: String): DashboardTask {
-        val normalizedStatus = status.lowercase(Locale.getDefault())
+        val normalizedStatus = Status.normalizeTaskStatus(status)
         val style = when (normalizedStatus) {
-            "completed" -> TaskStyle(
-                statusKey = "completed",
+            Status.TASK_COMPLETED -> TaskStyle(
+                statusKey = Status.TASK_COMPLETED,
                 iconResId = R.drawable.ic_check_circle,
                 accentColorResId = R.color.project_green,
                 iconBackgroundColorResId = R.color.project_green_soft,
                 statusBackgroundColorResId = R.color.project_green_soft,
                 statusTextColorResId = R.color.project_green
             )
-            "blocked" -> TaskStyle(
-                statusKey = "blocked",
-                iconResId = R.drawable.ic_alert_triangle,
-                accentColorResId = R.color.task_red,
-                iconBackgroundColorResId = R.color.task_red_soft,
-                statusBackgroundColorResId = R.color.task_red_soft,
-                statusTextColorResId = R.color.task_red
-            )
-            "in_progress" -> TaskStyle(
-                statusKey = "in_progress",
-                iconResId = R.drawable.ic_clock,
-                accentColorResId = R.color.task_orange,
-                iconBackgroundColorResId = R.color.task_orange_soft,
-                statusBackgroundColorResId = R.color.task_orange_soft,
-                statusTextColorResId = R.color.task_orange
-            )
             else -> TaskStyle(
-                statusKey = "pending",
+                statusKey = Status.TASK_TODO,
                 iconResId = R.drawable.ic_document,
                 accentColorResId = R.color.task_blue,
                 iconBackgroundColorResId = R.color.task_blue_soft,

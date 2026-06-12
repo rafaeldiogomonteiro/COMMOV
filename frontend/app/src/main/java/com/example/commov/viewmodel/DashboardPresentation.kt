@@ -8,6 +8,7 @@ import com.example.commov.data.remote.TaskApi
 import com.example.commov.data.remote.TaskTimeEntriesResult
 import com.example.commov.model.DashboardTask
 import com.example.commov.model.Project
+import com.example.commov.model.Status
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -15,7 +16,7 @@ import java.util.Locale
 
 object DashboardPresentation {
     fun openTasks(tasks: List<ApiTask>): List<ApiTask> {
-        return tasks.filter { !it.status.equals("completed", ignoreCase = true) }
+        return tasks.filter { !Status.isTaskCompleted(it.status) }
     }
 
     fun overdueTasks(tasks: List<ApiTask>): List<ApiTask> {
@@ -78,44 +79,28 @@ object DashboardPresentation {
     }
 
     fun toDashboardTask(task: ApiTask, projectName: String?): DashboardTask {
-        val normalizedStatus = task.status.lowercase(Locale.getDefault())
+        val normalizedStatus = Status.normalizeTaskStatus(task.status)
         val overdue = isOverdue(task.estimatedEndDate, task.status)
         val overEstimate = task.estimatedTime > 0 && task.timeSpent > task.estimatedTime
         val style = when {
             overdue -> TaskStyle(
-                statusKey = normalizedStatus.ifBlank { "pending" },
+                statusKey = Status.TASK_TODO,
                 iconResId = R.drawable.ic_alert_triangle,
                 accentColorResId = R.color.task_red,
                 iconBackgroundColorResId = R.color.task_red_soft,
                 statusBackgroundColorResId = R.color.task_red_soft,
                 statusTextColorResId = R.color.task_red
             )
-            normalizedStatus == "completed" -> TaskStyle(
-                statusKey = "completed",
+            normalizedStatus == Status.TASK_COMPLETED -> TaskStyle(
+                statusKey = Status.TASK_COMPLETED,
                 iconResId = R.drawable.ic_check_circle,
                 accentColorResId = R.color.project_green,
                 iconBackgroundColorResId = R.color.project_green_soft,
                 statusBackgroundColorResId = R.color.project_green_soft,
                 statusTextColorResId = R.color.project_green
             )
-            normalizedStatus == "blocked" -> TaskStyle(
-                statusKey = "blocked",
-                iconResId = R.drawable.ic_alert_triangle,
-                accentColorResId = R.color.task_red,
-                iconBackgroundColorResId = R.color.task_red_soft,
-                statusBackgroundColorResId = R.color.task_red_soft,
-                statusTextColorResId = R.color.task_red
-            )
-            normalizedStatus == "in_progress" -> TaskStyle(
-                statusKey = "in_progress",
-                iconResId = R.drawable.ic_clock,
-                accentColorResId = R.color.task_orange,
-                iconBackgroundColorResId = R.color.task_orange_soft,
-                statusBackgroundColorResId = R.color.task_orange_soft,
-                statusTextColorResId = R.color.task_orange
-            )
             else -> TaskStyle(
-                statusKey = "pending",
+                statusKey = Status.TASK_TODO,
                 iconResId = R.drawable.ic_document,
                 accentColorResId = R.color.task_blue,
                 iconBackgroundColorResId = R.color.task_blue_soft,

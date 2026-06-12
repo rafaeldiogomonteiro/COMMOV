@@ -28,6 +28,15 @@ class StatusTest {
     }
 
     @Test
+    fun normalizeTaskStatus_mapsEveryOpenStatusToTodo() {
+        assertEquals(Status.TASK_TODO, Status.normalizeTaskStatus(""))
+        assertEquals(Status.TASK_TODO, Status.normalizeTaskStatus("pending"))
+        assertEquals(Status.TASK_TODO, Status.normalizeTaskStatus("in_progress"))
+        assertEquals(Status.TASK_TODO, Status.normalizeTaskStatus("blocked"))
+        assertEquals(Status.TASK_COMPLETED, Status.normalizeTaskStatus("completed"))
+    }
+
+    @Test
     fun formatTaskMeta_includesDueDateWhenPresent() {
         assertEquals("Alpha", Status.formatTaskMeta("Alpha", null))
         assertEquals("Alpha • 2026-06-09", Status.formatTaskMeta("Alpha", "2026-06-09T00:00:00Z"))

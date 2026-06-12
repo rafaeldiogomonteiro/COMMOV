@@ -1,6 +1,7 @@
 package com.example.commov.data.remote
 
 import com.example.commov.BuildConfig
+import com.example.commov.model.Status
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -66,7 +67,7 @@ class DashboardApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 userIds = json.parseUserIds(),
                 title = json.getString("title"),
                 description = json.optString("description"),
-                status = json.optString("status", "pending"),
+                status = Status.normalizeTaskStatus(json.optString("status")),
                 estimatedEndDate = json.optNullableString("estimatedEndDate"),
                 actualEndDate = json.optNullableString("actualEndDate"),
                 estimatedTime = json.optDouble("estimatedTime", 0.0),

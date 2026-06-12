@@ -8,10 +8,8 @@ const (
 	ProjectStatusOnHold    = "on_hold"
 	ProjectStatusCancelled = "cancelled"
 
-	TaskStatusPending    = "pending"
-	TaskStatusInProgress = "in_progress"
-	TaskStatusCompleted  = "completed"
-	TaskStatusBlocked    = "blocked"
+	TaskStatusTodo      = "todo"
+	TaskStatusCompleted = "completed"
 )
 
 func IsValidProjectStatus(status string) bool {
@@ -36,7 +34,7 @@ func NormalizeProjectStatus(status string) (string, bool) {
 
 func IsValidTaskStatus(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case TaskStatusPending, TaskStatusInProgress, TaskStatusCompleted, TaskStatusBlocked:
+	case TaskStatusTodo, TaskStatusCompleted, "pending", "in_progress", "blocked":
 		return true
 	default:
 		return false
@@ -46,10 +44,13 @@ func IsValidTaskStatus(status string) bool {
 func NormalizeTaskStatus(status string) (string, bool) {
 	status = strings.ToLower(strings.TrimSpace(status))
 	if status == "" {
-		status = TaskStatusPending
+		status = TaskStatusTodo
 	}
 	if !IsValidTaskStatus(status) {
 		return "", false
+	}
+	if status != TaskStatusCompleted {
+		status = TaskStatusTodo
 	}
 	return status, true
 }
