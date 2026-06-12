@@ -4213,6 +4213,8 @@ private fun ProjectCard(
             color = colorResource(R.color.dashboard_text_secondary),
             fontSize = 14.sp,
             lineHeight = 16.sp,
+            // Mantém a altura do card consistente mesmo com descrições curtas.
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
