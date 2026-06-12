@@ -259,28 +259,67 @@ fun AdminScreenSkeleton(modifier: Modifier = Modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 22.dp)
-                .height(86.dp),
+                .padding(top = 22.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            repeat(3) {
+            repeat(2) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxHeight()
-                        .skeletonCard(8.dp)
-                        .padding(horizontal = 10.dp, vertical = 9.dp)
+                        .height(100.dp)
+                        .skeletonCard(10.dp)
+                        .padding(13.dp)
                 ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SkeletonBox(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(11.dp)
+                        )
+                        SkeletonBox(
+                            modifier = Modifier.size(32.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
                     SkeletonBox(
                         modifier = Modifier
+                            .padding(top = 10.dp)
                             .width(36.dp)
-                            .height(22.dp)
+                            .height(26.dp)
                     )
+                }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            repeat(2) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(100.dp)
+                        .skeletonCard(10.dp)
+                        .padding(13.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SkeletonBox(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(11.dp)
+                        )
+                        SkeletonBox(
+                            modifier = Modifier.size(32.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
                     SkeletonBox(
                         modifier = Modifier
-                            .padding(top = 6.dp)
-                            .fillMaxWidth()
-                            .height(11.dp)
+                            .padding(top = 10.dp)
+                            .width(36.dp)
+                            .height(26.dp)
                     )
                 }
             }
@@ -291,19 +330,11 @@ fun AdminScreenSkeleton(modifier: Modifier = Modifier) {
                 .padding(top = 24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                SkeletonBox(
-                    modifier = Modifier
-                        .width(100.dp)
-                        .height(18.dp)
-                )
-                SkeletonBox(
-                    modifier = Modifier
-                        .padding(top = 6.dp)
-                        .width(60.dp)
-                        .height(13.dp)
-                )
-            }
+            SkeletonBox(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(18.dp)
+            )
             SkeletonBox(
                 modifier = Modifier
                     .width(120.dp)

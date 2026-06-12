@@ -10,5 +10,6 @@ data class LoginUiState(
     @StringRes val passwordErrorResId: Int,
     @StringRes val generalErrorResId: Int,
     val isLoading: Boolean,
+    val isCheckingSession: Boolean = false,
     val loginAccepted: Boolean
 )

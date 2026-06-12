@@ -9,6 +9,7 @@ import androidx.annotation.StringRes
 import com.example.commov.BuildConfig
 import com.example.commov.R
 import com.example.commov.data.local.SessionManager
+import com.example.commov.data.local.SessionRestorer
 import com.example.commov.data.remote.AuthApi
 import com.example.commov.data.remote.LoginResult
 import com.example.commov.model.LoginModel
@@ -30,10 +31,34 @@ class LoginViewModel(
     }
     private var observer: StateObserver? = null
     private var isLoading = false
+    private var isCheckingSession = false
 
     fun observe(observer: StateObserver) {
         this.observer = observer
         publish(0, 0, 0, false)
+        restoreSession()
+    }
+
+    private fun restoreSession() {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank() || sessionManager.currentUser() == null) {
+            return
+        }
+
+        isCheckingSession = true
+        publish(0, 0, 0, false)
+
+        Thread {
+            val result = SessionRestorer.validate(sessionManager, authApi)
+            mainHandler.post {
+                isCheckingSession = false
+                when (result) {
+                    SessionRestorer.Result.Valid,
+                    SessionRestorer.Result.OfflineValid -> publish(0, 0, 0, true)
+                    SessionRestorer.Result.NeedsLogin -> publish(0, 0, 0, false)
+                }
+            }
+        }.start()
     }
 
     fun onEmailChanged(email: String) {
@@ -116,6 +141,7 @@ class LoginViewModel(
                 passwordErrorResId = passwordError,
                 generalErrorResId = generalError,
                 isLoading = isLoading,
+                isCheckingSession = isCheckingSession,
                 loginAccepted = loginAccepted
             )
         )

@@ -56,8 +56,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -146,8 +149,10 @@ import com.example.commov.ui.projects.CreateProjectActivity
 import com.example.commov.ui.projects.CreateTaskActivity
 import com.example.commov.ui.projects.ProjectsActivity
 import com.example.commov.ui.projects.TaskDetailActivity
+import com.example.commov.ui.projects.TasksActivity
 import com.example.commov.ui.settings.SettingsActivity
 import com.example.commov.ui.statistics.StatisticsActivity
+import com.example.commov.viewmodel.DashboardPresentation
 import com.example.commov.viewmodel.DashboardUiState
 import com.example.commov.viewmodel.DashboardViewModel
 import com.example.commov.viewmodel.LoginUiState
@@ -155,6 +160,8 @@ import com.example.commov.viewmodel.LoginViewModel
 import com.example.commov.viewmodel.ProjectsUiState
 import com.example.commov.viewmodel.ProjectsViewModel
 import com.example.commov.viewmodel.SettingsViewModel
+import com.example.commov.viewmodel.TasksUiState
+import com.example.commov.viewmodel.TasksViewModel
 import java.util.Calendar
 import java.util.Locale
 
@@ -173,7 +180,7 @@ fun LoginScreen() {
     val pendingPhotoStore = remember { PendingProfilePhotoStore(context.applicationContext) }
     val onboardingStore = remember { OnboardingStore(context.applicationContext) }
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
-    var state by remember { mutableStateOf(LoginUiState("", "", false, 0, 0, 0, false, false)) }
+    var state by remember { mutableStateOf(LoginUiState("", "", false, 0, 0, 0, false, false, false)) }
     var isSavingPhoto by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -250,6 +257,22 @@ fun LoginScreen() {
             .navigationBarsPadding(),
         contentAlignment = Alignment.Center
     ) {
+        if (state.isCheckingSession) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = stringResource(R.string.app_name),
+                    color = colorResource(R.color.login_text_primary),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = stringResource(R.string.login_restoring_session),
+                    modifier = Modifier.padding(top = 12.dp),
+                    color = colorResource(R.color.login_text_secondary),
+                    fontSize = 14.sp
+                )
+            }
+        } else {
         Column(
             modifier = Modifier
                 .padding(horizontal = 20.dp)
@@ -365,7 +388,9 @@ fun LoginScreen() {
                 onClick = { offlinePhotoPickerLauncher.launch(arrayOf("image/*")) }
             )
         }
+        }
 
+        if (!state.isCheckingSession) {
         Text(
             text = stringResource(R.string.login_reset_intro),
             color = colorResource(R.color.login_text_secondary).copy(alpha = 0.55f),
@@ -383,9 +408,11 @@ fun LoginScreen() {
                     }.start()
                 }
         )
+        }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen() {
     val context = LocalContext.current
@@ -400,11 +427,37 @@ fun DashboardScreen() {
                 completedTasks = 0,
                 pendingProgress = 0,
                 completedProgress = 0,
+                inProgressCount = 0,
+                blockedCount = 0,
                 tasks = emptyList(),
+                overdueTasks = emptyList(),
+                todayTasks = emptyList(),
+                weekTasks = emptyList(),
+                projects = emptyList(),
+                hoursLoggedThisWeek = 0.0,
+                tasksOverEstimate = 0,
+                canManageProjects = sessionManager.canManageProjects(),
                 requiresLogin = false,
                 isLoading = true
             )
         )
+    }
+    val pullRefreshState = rememberPullToRefreshState()
+    val profileMember = remember(state.userName) {
+        sessionManager.currentUser()?.let { user ->
+            ProjectMember(
+                userId = user.userId,
+                name = user.name,
+                initials = user.name
+                    .split(" ")
+                    .filter { it.isNotBlank() }
+                    .take(2)
+                    .joinToString("") { it.first().uppercase() }
+                    .ifBlank { "U" },
+                avatarColorResId = R.color.bottom_nav_selected,
+                photo = user.photo
+            )
+        }
     }
 
     DisposableEffect(viewModel) {
@@ -434,91 +487,218 @@ fun DashboardScreen() {
                     .screenContentPadding()
             )
         } else {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .screenContentPadding()
-        ) {
-            Text(
-                text = stringResource(
-                    R.string.dashboard_greeting,
-                    state.userName.ifBlank { sessionManager.currentUser()?.name?.trim().orEmpty() }.ifBlank { "…" }
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                color = colorResource(R.color.dashboard_text_primary),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(118.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = { viewModel.reload() },
+                state = pullRefreshState,
+                modifier = Modifier.fillMaxSize()
             ) {
-                DashboardSummaryCard(
-                    titleResId = R.string.dashboard_pending_tasks,
-                    count = state.pendingTasks,
-                    progress = state.pendingProgress,
-                    iconResId = R.drawable.ic_clock,
-                    progressColorResId = R.color.task_red,
-                    iconBackgroundColorResId = R.color.task_red_soft,
-                    modifier = Modifier.weight(1f)
-                )
-                DashboardSummaryCard(
-                    titleResId = R.string.dashboard_completed_tasks,
-                    count = state.completedTasks,
-                    progress = state.completedProgress,
-                    iconResId = R.drawable.ic_check_circle,
-                    progressColorResId = R.color.project_green,
-                    iconBackgroundColorResId = R.color.project_green_soft,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 24.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.dashboard_my_tasks),
-                    modifier = Modifier.weight(1f),
-                    color = colorResource(R.color.dashboard_text_primary),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = stringResource(R.string.dashboard_see_all),
+                Column(
                     modifier = Modifier
-                        .clickable {
-                            context.startActivity(Intent(context, ProjectsActivity::class.java))
-                        }
-                        .padding(vertical = 8.dp),
-                    color = colorResource(R.color.bottom_nav_selected),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (state.tasks.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.dashboard_empty_tasks),
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .screenContentPadding()
+                ) {
+                    DashboardHeader(
+                        userName = state.userName.ifBlank {
+                            sessionManager.currentUser()?.name?.trim().orEmpty()
+                        }.ifBlank { "…" },
+                        openTasksCount = state.pendingTasks,
+                        profileMember = profileMember
+                    )
+                    if (state.canManageProjects) {
+                        DashboardQuickActions(
+                            onCreateTask = {
+                                context.startActivity(Intent(context, ProjectsActivity::class.java))
+                            },
+                            onCreateProject = {
+                                context.startActivity(Intent(context, CreateProjectActivity::class.java))
+                            }
+                        )
+                    }
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        color = colorResource(R.color.dashboard_text_secondary),
-                        fontSize = 14.sp,
-                        textAlign = TextAlign.Center
+                            .padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        DashboardSummaryCard(
+                            titleResId = R.string.dashboard_pending_tasks,
+                            count = state.pendingTasks,
+                            progress = state.pendingProgress,
+                            iconResId = R.drawable.ic_clock,
+                            progressColorResId = R.color.task_red,
+                            iconBackgroundColorResId = R.color.task_red_soft,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DashboardSummaryCard(
+                            titleResId = R.string.dashboard_completed_tasks,
+                            count = state.completedTasks,
+                            progress = state.completedProgress,
+                            iconResId = R.drawable.ic_check_circle,
+                            progressColorResId = R.color.project_green,
+                            iconBackgroundColorResId = R.color.project_green_soft,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        DashboardMetricChip(
+                            labelResId = R.string.dashboard_in_progress,
+                            count = state.inProgressCount,
+                            accentColorResId = R.color.task_orange,
+                            backgroundColorResId = R.color.task_orange_soft,
+                            modifier = Modifier.weight(1f)
+                        )
+                        DashboardMetricChip(
+                            labelResId = R.string.dashboard_blocked,
+                            count = state.blockedCount,
+                            accentColorResId = R.color.task_red,
+                            backgroundColorResId = R.color.task_red_soft,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    DashboardTimeSummary(
+                        hoursLoggedThisWeek = state.hoursLoggedThisWeek,
+                        tasksOverEstimate = state.tasksOverEstimate,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                    if (state.overdueTasks.isNotEmpty()) {
+                        DashboardTaskSection(
+                            titleResId = R.string.dashboard_overdue,
+                            tasks = state.overdueTasks.take(3),
+                            onSeeAll = {
+                                context.startActivity(Intent(context, TasksActivity::class.java))
+                            },
+                            showSeeAll = false,
+                            topPadding = 24.dp
+                        )
+                    }
+                    if (state.todayTasks.isNotEmpty()) {
+                        DashboardTaskSection(
+                            titleResId = R.string.dashboard_for_today,
+                            tasks = state.todayTasks.take(3),
+                            onSeeAll = {
+                                context.startActivity(Intent(context, TasksActivity::class.java))
+                            },
+                            showSeeAll = false,
+                            topPadding = if (state.overdueTasks.isEmpty()) 24.dp else 16.dp
+                        )
+                    }
+                    if (state.weekTasks.isNotEmpty()) {
+                        DashboardTaskSection(
+                            titleResId = R.string.dashboard_this_week,
+                            tasks = state.weekTasks.take(3),
+                            onSeeAll = {
+                                context.startActivity(Intent(context, TasksActivity::class.java))
+                            },
+                            showSeeAll = false,
+                            topPadding = 16.dp
+                        )
+                    }
+                    DashboardProjectsSection(
+                        projects = state.projects,
+                        onProjectClick = { _ ->
+                            context.startActivity(Intent(context, ProjectsActivity::class.java))
+                        },
+                        onSeeAll = {
+                            context.startActivity(Intent(context, ProjectsActivity::class.java))
+                        },
+                        modifier = Modifier.padding(top = 24.dp)
+                    )
+                    DashboardTaskSection(
+                        titleResId = R.string.dashboard_my_tasks,
+                        tasks = state.tasks,
+                        onSeeAll = {
+                            context.startActivity(Intent(context, TasksActivity::class.java))
+                        },
+                        showSeeAll = true,
+                        topPadding = 24.dp,
+                        emptyContent = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.dashboard_empty_tasks),
+                                    color = colorResource(R.color.dashboard_text_secondary),
+                                    fontSize = 14.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                OutlinedActionButton(
+                                    text = stringResource(R.string.dashboard_view_projects),
+                                    modifier = Modifier
+                                        .padding(top = 14.dp)
+                                        .fillMaxWidth(0.7f)
+                                        .height(44.dp),
+                                    onClick = {
+                                        context.startActivity(Intent(context, ProjectsActivity::class.java))
+                                    }
+                                )
+                            }
+                        }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AllTasksScreen() {
+    val context = LocalContext.current
+    val activity = context.findActivity()
+    val viewModel = remember { TasksViewModel(context.applicationContext) }
+    var state by remember {
+        mutableStateOf(TasksUiState(tasks = emptyList(), requiresLogin = false, isLoading = true))
+    }
+
+    DisposableEffect(viewModel) {
+        viewModel.observe { state = it }
+        onDispose { }
+    }
+
+    LaunchedEffect(state.requiresLogin) {
+        if (state.requiresLogin) {
+            activity.startActivity(Intent(activity, MainActivity::class.java))
+            activity.finish()
+        }
+    }
+
+    SubPageScaffold {
+        SubPageContent {
+            PageTopBar(
+                title = stringResource(R.string.all_tasks_title),
+                subtitle = stringResource(R.string.all_tasks_subtitle),
+                onBack = { activity.finish() }
+            )
+            if (state.isLoading) {
+                repeat(4) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
+                            .height(66.dp)
+                            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
+                    ) {}
+                }
+            } else if (state.tasks.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.all_tasks_empty),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 32.dp),
+                    color = colorResource(R.color.dashboard_text_secondary),
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
+            } else {
                 state.tasks.forEach { task ->
                     DashboardTaskCard(
                         task = task,
@@ -526,18 +706,294 @@ fun DashboardScreen() {
                             .fillMaxWidth()
                             .height(66.dp)
                             .padding(bottom = 8.dp),
-                        onClick = {
-                            if (task.taskId > 0) {
-                                val intent = Intent(context, TaskDetailActivity::class.java)
-                                intent.putExtra(TaskDetailActivity.EXTRA_TASK_ID, task.taskId)
-                                context.startActivity(intent)
-                            }
-                        }
+                        onClick = { openTaskDetail(context, task.taskId) }
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DashboardHeader(
+    userName: String,
+    openTasksCount: Int,
+    profileMember: ProjectMember?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (profileMember != null) {
+            Avatar(member = profileMember, size = 52.dp)
         }
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = if (profileMember != null) 14.dp else 0.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.dashboard_greeting, userName),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = stringResource(R.string.dashboard_today_date, DashboardPresentation.todayLabel()),
+                modifier = Modifier.padding(top = 2.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 13.sp
+            )
+            Text(
+                text = stringResource(R.string.dashboard_open_tasks_subtitle, openTasksCount),
+                modifier = Modifier.padding(top = 2.dp),
+                color = colorResource(R.color.bottom_nav_selected),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardQuickActions(
+    onCreateTask: () -> Unit,
+    onCreateProject: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        OutlinedActionButton(
+            text = stringResource(R.string.dashboard_create_task),
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp),
+            onClick = onCreateTask
+        )
+        FilledActionButton(
+            text = stringResource(R.string.dashboard_create_project),
+            colorResId = R.color.login_button,
+            radius = 6.dp,
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp),
+            onClick = onCreateProject
+        )
+    }
+}
+
+@Composable
+private fun DashboardMetricChip(
+    @StringRes labelResId: Int,
+    count: Int,
+    @ColorRes accentColorResId: Int,
+    @ColorRes backgroundColorResId: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .height(44.dp)
+            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(colorResource(accentColorResId))
+        )
+        Text(
+            text = stringResource(labelResId),
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 8.dp),
+            color = colorResource(R.color.dashboard_text_secondary),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = count.toString(),
+            color = colorResource(accentColorResId),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun DashboardTimeSummary(
+    hoursLoggedThisWeek: Double,
+    tasksOverEstimate: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 10.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(
+                backgroundColorResId = R.color.task_blue_soft,
+                iconResId = R.drawable.ic_clock,
+                iconTintColorResId = R.color.bottom_nav_selected,
+                size = 32.dp,
+                iconSize = 16.dp,
+                radius = 16.dp
+            )
+            Text(
+                text = stringResource(
+                    R.string.dashboard_hours_this_week,
+                    formatDashboardHours(hoursLoggedThisWeek)
+                ),
+                modifier = Modifier.padding(start = 10.dp),
+                color = colorResource(R.color.dashboard_text_primary),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        if (tasksOverEstimate > 0) {
+            Text(
+                text = stringResource(R.string.dashboard_over_estimate, tasksOverEstimate),
+                color = colorResource(R.color.task_orange),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardProjectsSection(
+    projects: List<Project>,
+    onProjectClick: (Int) -> Unit,
+    onSeeAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        DashboardSectionHeader(
+            titleResId = R.string.dashboard_your_projects,
+            actionLabelResId = R.string.dashboard_see_all_projects,
+            onAction = onSeeAll
+        )
+        if (projects.isEmpty()) {
+            Text(
+                text = stringResource(R.string.projects_empty),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+        } else {
+            projects.forEach { project ->
+                ProjectCard(
+                    project = project,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    onClick = { onProjectClick(project.projectId) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardTaskSection(
+    @StringRes titleResId: Int,
+    tasks: List<DashboardTask>,
+    onSeeAll: () -> Unit,
+    showSeeAll: Boolean,
+    topPadding: Dp,
+    emptyContent: (@Composable () -> Unit)? = null
+) {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = topPadding)
+    ) {
+        DashboardSectionHeader(
+            titleResId = titleResId,
+            actionLabelResId = if (showSeeAll) R.string.dashboard_see_all else null,
+            onAction = if (showSeeAll) onSeeAll else null
+        )
+        if (tasks.isEmpty()) {
+            emptyContent?.invoke()
+        } else {
+            tasks.forEach { task ->
+                DashboardTaskCard(
+                    task = task,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(66.dp)
+                        .padding(bottom = 8.dp),
+                    onClick = { openTaskDetail(context, task.taskId) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardSectionHeader(
+    @StringRes titleResId: Int,
+    @StringRes actionLabelResId: Int?,
+    onAction: (() -> Unit)?
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(titleResId),
+            modifier = Modifier.weight(1f),
+            color = colorResource(R.color.dashboard_text_primary),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold
+        )
+        if (actionLabelResId != null && onAction != null) {
+            Text(
+                text = stringResource(actionLabelResId),
+                modifier = Modifier
+                    .clickable(onClick = onAction)
+                    .padding(vertical = 8.dp),
+                color = colorResource(R.color.bottom_nav_selected),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+private fun openTaskDetail(context: Context, taskId: Int) {
+    if (taskId <= 0) {
+        return
+    }
+    val intent = Intent(context, TaskDetailActivity::class.java)
+    intent.putExtra(TaskDetailActivity.EXTRA_TASK_ID, taskId)
+    context.startActivity(intent)
+}
+
+private fun formatDashboardHours(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toInt().toString()
+    } else {
+        String.format(Locale.getDefault(), "%.1f", value)
     }
 }
 
@@ -2958,23 +3414,47 @@ fun AdminScreen() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 22.dp)
-                    .height(86.dp),
+                    .padding(top = 22.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 AdminMetricCard(
                     label = stringResource(R.string.admin_users),
                     value = users.size.toString(),
+                    iconResId = R.drawable.ic_settings,
+                    accentColorResId = R.color.bottom_nav_selected,
+                    iconBackgroundColorResId = R.color.task_blue_soft,
                     modifier = Modifier.weight(1f)
                 )
                 AdminMetricCard(
+                    label = stringResource(R.string.admin_metric_active),
+                    value = activeCount.toString(),
+                    iconResId = R.drawable.ic_check_circle,
+                    accentColorResId = R.color.project_green,
+                    iconBackgroundColorResId = R.color.project_green_soft,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AdminMetricCard(
                     label = stringResource(R.string.admin_metric_admins),
                     value = adminCount.toString(),
+                    iconResId = R.drawable.ic_admin,
+                    accentColorResId = R.color.project_purple,
+                    iconBackgroundColorResId = R.color.project_purple_soft,
                     modifier = Modifier.weight(1f)
                 )
                 AdminMetricCard(
                     label = stringResource(R.string.admin_metric_managers),
                     value = managerCount.toString(),
+                    iconResId = R.drawable.ic_projects,
+                    accentColorResId = R.color.task_orange,
+                    iconBackgroundColorResId = R.color.task_orange_soft,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -2986,20 +3466,13 @@ fun AdminScreen() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.admin_users),
-                        color = colorResource(R.color.dashboard_text_primary),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "$activeCount / ${users.size}",
-                        modifier = Modifier.padding(top = 2.dp),
-                        color = colorResource(R.color.dashboard_text_secondary),
-                        fontSize = 13.sp
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.admin_users),
+                    modifier = Modifier.weight(1f),
+                    color = colorResource(R.color.dashboard_text_primary),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 FilledActionButton(
                     text = stringResource(R.string.admin_create_user),
                     colorResId = R.color.login_button,
@@ -3036,17 +3509,22 @@ fun AdminScreen() {
                     )
                 }
             } else {
-                users.forEach { user ->
-                    AdminUserRow(
-                        user = user,
-                        canDelete = user.userId != currentUser?.userId,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 10.dp),
-                        onEdit = { userToEdit = user },
-                        onChangePassword = { userToChangePassword = user },
-                        onDelete = { userToDelete = user }
-                    )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    users.forEach { user ->
+                        AdminUserRow(
+                            user = user,
+                            canDelete = user.userId != currentUser?.userId,
+                            modifier = Modifier.fillMaxWidth(),
+                            onEdit = { userToEdit = user },
+                            onChangePassword = { userToChangePassword = user },
+                            onDelete = { userToDelete = user }
+                        )
+                    }
                 }
             }
         }
@@ -4050,29 +4528,44 @@ private fun DashboardSummaryCard(
 private fun AdminMetricCard(
     label: String,
     value: String,
+    @DrawableRes iconResId: Int,
+    @ColorRes accentColorResId: Int,
+    @ColorRes iconBackgroundColorResId: Int,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
-            .fillMaxHeight()
-            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 8.dp)
-            .padding(horizontal = 10.dp, vertical = 9.dp)
+            .height(100.dp)
+            .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 10.dp)
+            .padding(13.dp)
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = label.uppercase(Locale.getDefault()),
+                modifier = Modifier.weight(1f),
+                color = colorResource(R.color.dashboard_text_secondary),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 13.sp
+            )
+            CardIcon(
+                iconResId = iconResId,
+                containerSize = 32.dp,
+                iconSize = 16.dp,
+                cornerRadius = 8.dp,
+                backgroundColorResId = iconBackgroundColorResId,
+                tintColorResId = accentColorResId
+            )
+        }
         Text(
             text = value,
+            modifier = Modifier.padding(top = 10.dp),
             color = colorResource(R.color.dashboard_text_primary),
-            fontSize = 22.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1
-        )
-        Text(
-            text = label,
-            modifier = Modifier.padding(top = 2.dp),
-            color = colorResource(R.color.dashboard_text_secondary),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -4462,6 +4955,7 @@ private fun AdminUserRow(
 
     Row(
         modifier = modifier
+            .defaultMinSize(minHeight = 76.dp)
             .cardBackground(R.color.dashboard_card, R.color.dashboard_card_stroke, 10.dp)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -4490,10 +4984,13 @@ private fun AdminUserRow(
                 .weight(1f)
                 .padding(start = 12.dp, end = 8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = user.name,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f),
                     color = colorResource(R.color.dashboard_text_primary),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
@@ -4503,7 +5000,7 @@ private fun AdminUserRow(
                 if (!user.active) {
                     Box(
                         modifier = Modifier
-                            .padding(start = 8.dp)
+                            .padding(start = 6.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(colorResource(R.color.settings_logout).copy(alpha = 0.12f))
                             .padding(horizontal = 7.dp, vertical = 2.dp)
@@ -4516,10 +5013,11 @@ private fun AdminUserRow(
                         )
                     }
                 }
+                RoleBadge(user.role, Modifier.padding(start = 6.dp))
             }
             Text(
                 text = "@${user.username}",
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.padding(top = 4.dp),
                 color = colorResource(R.color.dashboard_text_secondary),
                 fontSize = 12.sp,
                 maxLines = 1,
@@ -4527,13 +5025,12 @@ private fun AdminUserRow(
             )
             Text(
                 text = user.email,
-                modifier = Modifier.padding(top = 1.dp),
+                modifier = Modifier.padding(top = 2.dp),
                 color = colorResource(R.color.dashboard_text_secondary),
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            RoleBadge(user.role, Modifier.padding(top = 7.dp))
         }
         Box {
             IconButtonLike(

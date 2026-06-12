@@ -11,8 +11,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.example.commov.MainActivity
 import com.example.commov.data.local.OnboardingStore
+import com.example.commov.data.local.SessionManager
+import com.example.commov.data.local.SessionRestorer
 import com.example.commov.ui.ComMovActivity
 import com.example.commov.ui.compose.IntroScreen
+import com.example.commov.ui.dashboard.DashboardActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -31,7 +34,7 @@ class IntroActivity : ComMovActivity() {
                     onboardingStore.hasSeenIntro()
                 }
                 if (hasSeenIntro) {
-                    navigateToLogin()
+                    navigateAfterIntro()
                 } else {
                     showIntro = true
                 }
@@ -44,7 +47,7 @@ class IntroActivity : ComMovActivity() {
                             withContext(Dispatchers.IO) {
                                 onboardingStore.markIntroSeen()
                             }
-                            navigateToLogin()
+                            navigateAfterIntro()
                         }
                     },
                     onSkip = {
@@ -52,7 +55,7 @@ class IntroActivity : ComMovActivity() {
                             withContext(Dispatchers.IO) {
                                 onboardingStore.markIntroSeen()
                             }
-                            navigateToLogin()
+                            navigateAfterIntro()
                         }
                     },
                 )
@@ -60,8 +63,19 @@ class IntroActivity : ComMovActivity() {
         }
     }
 
-    private fun navigateToLogin() {
-        startActivity(Intent(this, MainActivity::class.java))
-        finish()
+    private fun navigateAfterIntro() {
+        val sessionManager = SessionManager(applicationContext)
+        Thread {
+            val result = SessionRestorer.validate(sessionManager)
+            runOnUiThread {
+                val destination = when (result) {
+                    SessionRestorer.Result.Valid,
+                    SessionRestorer.Result.OfflineValid -> DashboardActivity::class.java
+                    SessionRestorer.Result.NeedsLogin -> MainActivity::class.java
+                }
+                startActivity(Intent(this, destination))
+                finish()
+            }
+        }.start()
     }
 }

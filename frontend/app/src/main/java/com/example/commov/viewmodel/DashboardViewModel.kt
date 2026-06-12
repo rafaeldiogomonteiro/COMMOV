@@ -3,10 +3,8 @@ package com.example.commov.viewmodel
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.example.commov.R
 import com.example.commov.data.local.SessionManager
 import com.example.commov.data.remote.AuthApi
-import com.example.commov.data.remote.ApiTask
 import com.example.commov.data.remote.CheckLoginResult
 import com.example.commov.data.remote.DashboardApi
 import com.example.commov.data.remote.DashboardResult
@@ -25,12 +23,26 @@ class DashboardViewModel(
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var observer: StateObserver? = null
+    private var refreshGeneration = 0
     private var state = emptyState(userName = sessionManager.currentUser()?.name?.trim().orEmpty())
 
     fun observe(observer: StateObserver) {
         this.observer = observer
         publish(state)
         refreshSession()
+    }
+
+    fun reload() {
+        val token = sessionManager.token()
+        if (token.isNullOrBlank()) {
+            state = state.copy(requiresLogin = true, isLoading = false, isRefreshing = false)
+            publish(state)
+            return
+        }
+
+        state = state.copy(isRefreshing = !state.isLoading)
+        publish(state)
+        refreshDashboard(token)
     }
 
     private fun refreshSession() {
@@ -70,37 +82,58 @@ class DashboardViewModel(
     }
 
     private fun refreshDashboard(token: String) {
+        val generation = ++refreshGeneration
         Thread {
             val result = dashboardApi.dashboard(token)
-            mainHandler.post {
-                when (result) {
-                    is DashboardResult.Success -> {
-                        state = state.copy(
-                            pendingTasks = result.tasks.count { !it.status.equals("completed", ignoreCase = true) },
-                            completedTasks = result.tasks.count { it.status.equals("completed", ignoreCase = true) },
-                            pendingProgress = result.tasks.percent { !it.status.equals("completed", ignoreCase = true) },
-                            completedProgress = result.tasks.percent { it.status.equals("completed", ignoreCase = true) },
-                            tasks = result.tasks
-                                .filter { !it.status.equals("completed", ignoreCase = true) }
-                                .sortedWith(compareBy<ApiTask> { it.estimatedEndDate == null }.thenBy { it.estimatedEndDate })
-                                .take(4)
-                                .map { it.toDashboardTask(result.projectsById) },
-                            requiresLogin = false
-                        )
-                    }
-                    DashboardResult.Unauthorized -> {
-                        sessionManager.clear()
-                        state = state.copy(requiresLogin = true, isLoading = false)
-                    }
-                    DashboardResult.NetworkError,
-                    is DashboardResult.ServerError -> {
-                        state = state.copy(requiresLogin = false, isLoading = false)
-                    }
+            val mappedState = when (result) {
+                is DashboardResult.Success -> buildState(result, token)
+                DashboardResult.Unauthorized -> {
+                    sessionManager.clear()
+                    state.copy(requiresLogin = true, isLoading = false, isRefreshing = false)
                 }
-                state = state.copy(isLoading = false)
+                DashboardResult.NetworkError,
+                is DashboardResult.ServerError -> {
+                    state.copy(requiresLogin = false, isLoading = false, isRefreshing = false)
+                }
+            }
+
+            mainHandler.post {
+                if (generation != refreshGeneration) {
+                    return@post
+                }
+                state = mappedState.copy(isLoading = false, isRefreshing = false)
                 publish(state)
             }
         }.start()
+    }
+
+    private fun buildState(result: DashboardResult.Success, token: String): DashboardUiState {
+        val projectsById = result.projects.associate { it.projectId to it.name }
+        val openTasks = DashboardPresentation.openTasks(result.tasks)
+        val mapTask: (com.example.commov.data.remote.ApiTask) -> DashboardTask = { task ->
+            DashboardPresentation.toDashboardTask(task, projectsById[task.projectId])
+        }
+
+        return state.copy(
+            pendingTasks = openTasks.size,
+            completedTasks = result.tasks.count { it.status.equals("completed", ignoreCase = true) },
+            pendingProgress = result.tasks.percent { !it.status.equals("completed", ignoreCase = true) },
+            completedProgress = result.tasks.percent { it.status.equals("completed", ignoreCase = true) },
+            inProgressCount = openTasks.count { it.status.equals("in_progress", ignoreCase = true) },
+            blockedCount = openTasks.count { it.status.equals("blocked", ignoreCase = true) },
+            tasks = openTasks
+                .sortedWith(compareBy<com.example.commov.data.remote.ApiTask> { it.estimatedEndDate == null }.thenBy { it.estimatedEndDate })
+                .take(4)
+                .map(mapTask),
+            overdueTasks = DashboardPresentation.overdueTasks(result.tasks).map(mapTask),
+            todayTasks = DashboardPresentation.todayTasks(result.tasks).map(mapTask),
+            weekTasks = DashboardPresentation.weekTasks(result.tasks).map(mapTask),
+            projects = DashboardPresentation.previewProjects(result.projects, result.tasks),
+            hoursLoggedThisWeek = DashboardPresentation.weeklyHoursLogged(token, result.tasks),
+            tasksOverEstimate = DashboardPresentation.tasksOverEstimateCount(result.tasks),
+            canManageProjects = sessionManager.canManageProjects(),
+            requiresLogin = false
+        )
     }
 
     private fun publish(state: DashboardUiState) {
@@ -114,93 +147,26 @@ class DashboardViewModel(
             completedTasks = 0,
             pendingProgress = 0,
             completedProgress = 0,
+            inProgressCount = 0,
+            blockedCount = 0,
             tasks = emptyList(),
+            overdueTasks = emptyList(),
+            todayTasks = emptyList(),
+            weekTasks = emptyList(),
+            projects = emptyList(),
+            hoursLoggedThisWeek = 0.0,
+            tasksOverEstimate = 0,
+            canManageProjects = sessionManager.canManageProjects(),
             requiresLogin = false,
             isLoading = true
         )
     }
 
-    private fun List<ApiTask>.percent(predicate: (ApiTask) -> Boolean): Int {
+    private fun List<com.example.commov.data.remote.ApiTask>.percent(predicate: (com.example.commov.data.remote.ApiTask) -> Boolean): Int {
         if (isEmpty()) {
             return 0
         }
 
         return ((count(predicate).toFloat() / size) * 100).toInt()
     }
-
-    private fun ApiTask.toDashboardTask(projectsById: Map<Int, String>): DashboardTask {
-        val normalizedStatus = status.lowercase(Locale.getDefault())
-        val style = when (normalizedStatus) {
-            "completed" -> TaskStyle(
-                statusKey = "completed",
-                iconResId = R.drawable.ic_check_circle,
-                accentColorResId = R.color.project_green,
-                iconBackgroundColorResId = R.color.project_green_soft,
-                statusBackgroundColorResId = R.color.project_green_soft,
-                statusTextColorResId = R.color.project_green
-            )
-            "blocked" -> TaskStyle(
-                statusKey = "blocked",
-                iconResId = R.drawable.ic_alert_triangle,
-                accentColorResId = R.color.task_red,
-                iconBackgroundColorResId = R.color.task_red_soft,
-                statusBackgroundColorResId = R.color.task_red_soft,
-                statusTextColorResId = R.color.task_red
-            )
-            "in_progress" -> TaskStyle(
-                statusKey = "in_progress",
-                iconResId = R.drawable.ic_clock,
-                accentColorResId = R.color.task_orange,
-                iconBackgroundColorResId = R.color.task_orange_soft,
-                statusBackgroundColorResId = R.color.task_orange_soft,
-                statusTextColorResId = R.color.task_orange
-            )
-            else -> TaskStyle(
-                statusKey = "pending",
-                iconResId = R.drawable.ic_document,
-                accentColorResId = R.color.task_blue,
-                iconBackgroundColorResId = R.color.task_blue_soft,
-                statusBackgroundColorResId = R.color.task_status_gray_bg,
-                statusTextColorResId = R.color.task_status_gray_text
-            )
-        }
-
-        return DashboardTask(
-            titleResId = 0,
-            metaResId = 0,
-            statusResId = 0,
-            iconResId = style.iconResId,
-            accentColorResId = style.accentColorResId,
-            iconBackgroundColorResId = style.iconBackgroundColorResId,
-            statusBackgroundColorResId = style.statusBackgroundColorResId,
-            statusTextColorResId = style.statusTextColorResId,
-            titleText = title,
-            metaText = taskMeta(projectsById[projectId], estimatedEndDate),
-            statusText = style.statusKey,
-            taskId = taskId
-        )
-    }
-
-    private fun taskMeta(projectName: String?, estimatedEndDate: String?): String {
-        val project = projectName ?: "Project"
-        val dueDate = estimatedEndDate?.toDisplayDate()
-        return if (dueDate == null) {
-            project
-        } else {
-            "$project • $dueDate"
-        }
-    }
-
-    private fun String.toDisplayDate(): String? {
-        return take(10).takeIf { it.isNotBlank() }
-    }
-
-    private data class TaskStyle(
-        val statusKey: String,
-        val iconResId: Int,
-        val accentColorResId: Int,
-        val iconBackgroundColorResId: Int,
-        val statusBackgroundColorResId: Int,
-        val statusTextColorResId: Int
-    )
 }

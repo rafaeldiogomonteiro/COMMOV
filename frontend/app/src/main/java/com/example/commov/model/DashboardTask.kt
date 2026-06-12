@@ -16,5 +16,8 @@ data class DashboardTask(
     val titleText: String? = null,
     val metaText: String? = null,
     val statusText: String? = null,
-    val taskId: Int = 0
+    val taskId: Int = 0,
+    val isOverdue: Boolean = false,
+    val estimatedEndDate: String? = null,
+    val isOverEstimate: Boolean = false
 )

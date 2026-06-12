@@ -17,13 +17,13 @@ class DashboardApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         val projects = when (val projectsResult = getArray("/projects", token)) {
             is ArrayResult.Success -> parseProjects(projectsResult.array)
             ArrayResult.Unauthorized -> return DashboardResult.Unauthorized
-            ArrayResult.NetworkError -> emptyMap()
-            is ArrayResult.ServerError -> emptyMap()
+            ArrayResult.NetworkError -> emptyList()
+            is ArrayResult.ServerError -> emptyList()
         }
 
         return DashboardResult.Success(
             tasks = parseTasks(tasksResult.array),
-            projectsById = projects
+            projects = projects
         )
     }
 
@@ -80,10 +80,15 @@ class DashboardApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
-    private fun parseProjects(array: JSONArray): Map<Int, String> {
-        return (0 until array.length()).associate { index ->
+    private fun parseProjects(array: JSONArray): List<ApiProjectSummary> {
+        return (0 until array.length()).map { index ->
             val json = array.getJSONObject(index)
-            json.getInt("projectId") to json.getString("name")
+            ApiProjectSummary(
+                projectId = json.getInt("projectId"),
+                name = json.getString("name"),
+                description = json.optString("description"),
+                status = json.optString("status", "active")
+            )
         }
     }
 
@@ -111,7 +116,7 @@ class DashboardApi(private val baseUrl: String = BuildConfig.API_BASE_URL) {
 
     private fun ArrayResult.toDashboardResult(): DashboardResult {
         return when (this) {
-            is ArrayResult.Success -> DashboardResult.Success(emptyList(), emptyMap())
+            is ArrayResult.Success -> DashboardResult.Success(emptyList(), emptyList())
             ArrayResult.Unauthorized -> DashboardResult.Unauthorized
             ArrayResult.NetworkError -> DashboardResult.NetworkError
             is ArrayResult.ServerError -> DashboardResult.ServerError(message)
@@ -137,10 +142,17 @@ data class ApiTask(
     val photo: String
 )
 
+data class ApiProjectSummary(
+    val projectId: Int,
+    val name: String,
+    val description: String,
+    val status: String
+)
+
 sealed interface DashboardResult {
     data class Success(
         val tasks: List<ApiTask>,
-        val projectsById: Map<Int, String>
+        val projects: List<ApiProjectSummary>
     ) : DashboardResult
 
     data object Unauthorized : DashboardResult
