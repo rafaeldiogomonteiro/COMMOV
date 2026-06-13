@@ -88,7 +88,7 @@ fun DashboardScreenSkeleton(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 16.dp)
-                .height(118.dp),
+                .height(120.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             repeat(2) {
@@ -120,6 +120,13 @@ fun DashboardScreenSkeleton(modifier: Modifier = Modifier) {
                 }
             }
         }
+        SkeletonBox(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp)
+                .height(56.dp)
+                .skeletonCard(10.dp)
+        )
         SkeletonBox(
             modifier = Modifier
                 .padding(top = 24.dp)

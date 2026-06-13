@@ -26,21 +26,29 @@ func (r *TaskRepo) GetByID(ctx context.Context, taskID int) (*entity.Task, error
 
 func (r *TaskRepo) List(ctx context.Context) ([]entity.Task, error) {
 	var tasks []entity.Task
-	err := r.DB.WithContext(ctx).Order("task_id desc").Find(&tasks).Error
+	err := r.DB.WithContext(ctx).
+		Joins("INNER JOIN projects ON projects.project_id = tasks.project_id").
+		Where("projects.status <> ?", entity.ProjectStatusCancelled).
+		Order("tasks.task_id desc").
+		Find(&tasks).Error
 	return tasks, err
 }
 
 func (r *TaskRepo) ListByProjectID(ctx context.Context, projectID int) ([]entity.Task, error) {
 	var tasks []entity.Task
-	err := r.DB.WithContext(ctx).Where("project_id = ?", projectID).Find(&tasks).Error
+	err := r.DB.WithContext(ctx).
+		Joins("INNER JOIN projects ON projects.project_id = tasks.project_id").
+		Where("tasks.project_id = ? AND projects.status <> ?", projectID, entity.ProjectStatusCancelled).
+		Find(&tasks).Error
 	return tasks, err
 }
 
 func (r *TaskRepo) ListByUserID(ctx context.Context, userID int) ([]entity.Task, error) {
 	var tasks []entity.Task
 	err := r.DB.WithContext(ctx).
+		Joins("INNER JOIN projects ON projects.project_id = tasks.project_id").
 		Joins("INNER JOIN task_users ON task_users.task_id = tasks.task_id").
-		Where("task_users.user_id = ?", userID).
+		Where("task_users.user_id = ? AND projects.status <> ?", userID, entity.ProjectStatusCancelled).
 		Order("tasks.task_id desc").
 		Find(&tasks).Error
 
@@ -50,8 +58,9 @@ func (r *TaskRepo) ListByUserID(ctx context.Context, userID int) ([]entity.Task,
 func (r *TaskRepo) ListByProjectAndUserID(ctx context.Context, projectID int, userID int) ([]entity.Task, error) {
 	var tasks []entity.Task
 	err := r.DB.WithContext(ctx).
+		Joins("INNER JOIN projects ON projects.project_id = tasks.project_id").
 		Joins("INNER JOIN task_users ON task_users.task_id = tasks.task_id").
-		Where("tasks.project_id = ? AND task_users.user_id = ?", projectID, userID).
+		Where("tasks.project_id = ? AND task_users.user_id = ? AND projects.status <> ?", projectID, userID, entity.ProjectStatusCancelled).
 		Order("tasks.task_id desc").
 		Find(&tasks).Error
 

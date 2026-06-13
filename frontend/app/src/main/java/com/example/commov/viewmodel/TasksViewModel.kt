@@ -44,8 +44,10 @@ class TasksViewModel(
             mainHandler.post {
                 state = when (result) {
                     is DashboardResult.Success -> {
-                        val projectsById = result.projects.associate { it.projectId to it.name }
-                        val tasks = DashboardPresentation.openTasks(result.tasks)
+                        val activeProjects = DashboardPresentation.activeProjects(result.projects)
+                        val activeTasks = DashboardPresentation.tasksFromActiveProjects(result.tasks, result.projects)
+                        val projectsById = activeProjects.associate { it.projectId to it.name }
+                        val tasks = DashboardPresentation.openTasks(activeTasks)
                             .sortedWith(
                                 compareBy<com.example.commov.data.remote.ApiTask> {
                                     !DashboardPresentation.isOverdue(it.estimatedEndDate, it.status)

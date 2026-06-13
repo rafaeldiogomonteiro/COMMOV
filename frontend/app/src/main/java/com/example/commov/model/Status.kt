@@ -21,6 +21,10 @@ object Status {
         return normalized.takeIf { it in validProjectStatuses }
     }
 
+    fun isProjectCancelled(raw: String): Boolean {
+        return raw.trim().equals(PROJECT_CANCELLED, ignoreCase = true)
+    }
+
     fun isTaskCompleted(raw: String): Boolean {
         return raw.trim().equals(TASK_COMPLETED, ignoreCase = true)
     }

@@ -26,7 +26,10 @@ func (r *ProjectRepo) GetByID(ctx context.Context, projectID int) (*entity.Proje
 
 func (r *ProjectRepo) List(ctx context.Context) ([]entity.Project, error) {
 	var projects []entity.Project
-	err := r.DB.WithContext(ctx).Order("project_id desc").Find(&projects).Error
+	err := r.DB.WithContext(ctx).
+		Where("status <> ?", entity.ProjectStatusCancelled).
+		Order("project_id desc").
+		Find(&projects).Error
 	return projects, err
 }
 
@@ -35,7 +38,7 @@ func (r *ProjectRepo) ListByUserID(ctx context.Context, userID int) ([]entity.Pr
 	err := r.DB.WithContext(ctx).
 		Model(&entity.Project{}).
 		Joins("JOIN project_users ON project_users.project_id = projects.project_id").
-		Where("project_users.user_id = ?", userID).
+		Where("project_users.user_id = ? AND projects.status <> ?", userID, entity.ProjectStatusCancelled).
 		Order("projects.project_id desc").
 		Find(&projects).Error
 
@@ -53,7 +56,7 @@ func (r *ProjectRepo) Delete(ctx context.Context, projectID int) error {
 func (r *ProjectRepo) ListManagedByUserID(ctx context.Context, userID int) ([]entity.Project, error) {
 	var projects []entity.Project
 	err := r.DB.WithContext(ctx).
-		Where("manager_id = ?", userID).
+		Where("manager_id = ? AND status <> ?", userID, entity.ProjectStatusCancelled).
 		Order("project_id desc").
 		Find(&projects).Error
 

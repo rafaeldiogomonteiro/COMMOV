@@ -73,6 +73,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
@@ -509,7 +510,8 @@ fun DashboardScreen() {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp),
+                            .padding(top = 16.dp)
+                            .height(120.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         DashboardSummaryCard(
@@ -534,7 +536,7 @@ fun DashboardScreen() {
                     DashboardTimeSummary(
                         hoursLoggedThisWeek = state.hoursLoggedThisWeek,
                         tasksOverEstimate = state.tasksOverEstimate,
-                        modifier = Modifier.padding(top = 12.dp)
+                        modifier = Modifier.padding(top = 16.dp)
                     )
                     if (state.overdueTasks.isNotEmpty()) {
                         DashboardTaskSection(
@@ -778,6 +780,11 @@ private fun DashboardProjectsSection(
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val backgroundColor = colorResource(R.color.dashboard_background)
+    val fullVisibleCount = 2
+    val cardSpacing = 10.dp
+    val peekHeight = 52.dp
+
     Column(modifier = modifier.fillMaxWidth()) {
         DashboardSectionHeader(
             titleResId = R.string.dashboard_your_projects,
@@ -795,14 +802,57 @@ private fun DashboardProjectsSection(
                 textAlign = TextAlign.Center
             )
         } else {
-            projects.forEach { project ->
+            projects.take(fullVisibleCount).forEach { project ->
                 ProjectCard(
                     project = project,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp),
+                        .padding(bottom = cardSpacing),
                     onClick = { onProjectClick(project.projectId) }
                 )
+            }
+
+            if (projects.size > fullVisibleCount) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp)
+                        .height(10.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0.0f to Color.Transparent,
+                                    1.0f to Color.Black.copy(alpha = 0.07f)
+                                )
+                            )
+                        )
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(peekHeight)
+                        .clip(RoundedCornerShape(10.dp))
+                ) {
+                    ProjectCard(
+                        project = projects[fullVisibleCount],
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onSeeAll
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0.0f to Color.Transparent,
+                                        0.35f to backgroundColor.copy(alpha = 0.55f),
+                                        0.7f to backgroundColor.copy(alpha = 0.88f),
+                                        1.0f to backgroundColor
+                                    )
+                                )
+                            )
+                    )
+                }
             }
         }
     }
@@ -4410,7 +4460,12 @@ private fun DashboardSummaryCard(
                 tintColorResId = progressColorResId
             )
         }
-        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 7.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
             Text(
                 text = count.toString(),
                 color = colorResource(R.color.dashboard_text_primary),
@@ -4418,7 +4473,11 @@ private fun DashboardSummaryCard(
                 fontWeight = FontWeight.Bold
             )
         }
-        ProgressLine(progress = progress, colorResId = progressColorResId)
+        ProgressLine(
+            progress = progress,
+            colorResId = progressColorResId,
+            modifier = Modifier.padding(top = 7.dp)
+        )
     }
 }
 
@@ -4469,9 +4528,13 @@ private fun AdminMetricCard(
 }
 
 @Composable
-private fun ProgressLine(progress: Int, @ColorRes colorResId: Int) {
+private fun ProgressLine(
+    progress: Int,
+    @ColorRes colorResId: Int,
+    modifier: Modifier = Modifier
+) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(8.dp)
             .clip(RoundedCornerShape(4.dp))
@@ -4850,6 +4913,13 @@ private fun AdminUserRow(
     onDelete: () -> Unit
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val photoUrl = user.photo.takeIf { it.isNotBlank() }?.let { PhotoApi().photoUrl(it) }
+    val initials = user.name
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .joinToString("") { it.first().uppercase() }
+        .ifBlank { "U" }
 
     Row(
         modifier = modifier
@@ -4865,17 +4935,24 @@ private fun AdminUserRow(
                 .background(colorResource(user.roleSoftColorResId())),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = user.name
-                    .split(" ")
-                    .filter { it.isNotBlank() }
-                    .take(2)
-                    .joinToString("") { it.first().uppercase() }
-                    .ifBlank { "U" },
-                color = colorResource(user.roleColorResId()),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
+            if (photoUrl != null) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(photoUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = user.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Text(
+                    text = initials,
+                    color = colorResource(user.roleColorResId()),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
         Column(
             modifier = Modifier

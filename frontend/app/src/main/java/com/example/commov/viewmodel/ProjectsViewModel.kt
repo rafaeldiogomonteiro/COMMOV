@@ -74,7 +74,9 @@ class ProjectsViewModel(
                 when (result) {
                     is ProjectsResult.Success -> {
                         state = state.copy(
-                            projects = result.projects.mapIndexed { index, project -> project.toProject(index) },
+                            projects = result.projects
+                                .filter { !Status.isProjectCancelled(it.status) }
+                                .mapIndexed { index, project -> project.toProject(index) },
                             canCreateTasks = sessionManager.canManageProjects(),
                             requiresLogin = false
                         )

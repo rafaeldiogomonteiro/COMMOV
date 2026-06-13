@@ -108,27 +108,29 @@ class DashboardViewModel(
     }
 
     private fun buildState(result: DashboardResult.Success, token: String): DashboardUiState {
-        val projectsById = result.projects.associate { it.projectId to it.name }
-        val openTasks = DashboardPresentation.openTasks(result.tasks)
+        val activeProjects = DashboardPresentation.activeProjects(result.projects)
+        val activeTasks = DashboardPresentation.tasksFromActiveProjects(result.tasks, result.projects)
+        val projectsById = activeProjects.associate { it.projectId to it.name }
+        val openTasks = DashboardPresentation.openTasks(activeTasks)
         val mapTask: (com.example.commov.data.remote.ApiTask) -> DashboardTask = { task ->
             DashboardPresentation.toDashboardTask(task, projectsById[task.projectId])
         }
 
         return state.copy(
             todoTasks = openTasks.size,
-            completedTasks = result.tasks.count { Status.isTaskCompleted(it.status) },
-            todoProgress = result.tasks.percent { !Status.isTaskCompleted(it.status) },
-            completedProgress = result.tasks.percent { Status.isTaskCompleted(it.status) },
+            completedTasks = activeTasks.count { Status.isTaskCompleted(it.status) },
+            todoProgress = activeTasks.percent { !Status.isTaskCompleted(it.status) },
+            completedProgress = activeTasks.percent { Status.isTaskCompleted(it.status) },
             tasks = openTasks
                 .sortedWith(compareBy<com.example.commov.data.remote.ApiTask> { it.estimatedEndDate == null }.thenBy { it.estimatedEndDate })
                 .take(4)
                 .map(mapTask),
-            overdueTasks = DashboardPresentation.overdueTasks(result.tasks).map(mapTask),
-            todayTasks = DashboardPresentation.todayTasks(result.tasks).map(mapTask),
-            weekTasks = DashboardPresentation.weekTasks(result.tasks).map(mapTask),
-            projects = DashboardPresentation.previewProjects(result.projects, result.tasks),
-            hoursLoggedThisWeek = DashboardPresentation.weeklyHoursLogged(token, result.tasks),
-            tasksOverEstimate = DashboardPresentation.tasksOverEstimateCount(result.tasks),
+            overdueTasks = DashboardPresentation.overdueTasks(activeTasks).map(mapTask),
+            todayTasks = DashboardPresentation.todayTasks(activeTasks).map(mapTask),
+            weekTasks = DashboardPresentation.weekTasks(activeTasks).map(mapTask),
+            projects = DashboardPresentation.previewProjects(result.projects, activeTasks),
+            hoursLoggedThisWeek = DashboardPresentation.weeklyHoursLogged(token, activeTasks),
+            tasksOverEstimate = DashboardPresentation.tasksOverEstimateCount(activeTasks),
             canManageProjects = sessionManager.canManageProjects(),
             requiresLogin = false
         )

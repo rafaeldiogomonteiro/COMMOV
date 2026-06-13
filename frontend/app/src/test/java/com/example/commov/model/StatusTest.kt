@@ -8,6 +8,14 @@ import org.junit.Test
 
 class StatusTest {
     @Test
+    fun isProjectCancelled_detectsCancelledStatus() {
+        assertTrue(Status.isProjectCancelled(Status.PROJECT_CANCELLED))
+        assertTrue(Status.isProjectCancelled(" CANCELLED "))
+        assertFalse(Status.isProjectCancelled(Status.PROJECT_ACTIVE))
+        assertFalse(Status.isProjectCancelled(Status.PROJECT_COMPLETED))
+    }
+
+    @Test
     fun normalizeProjectStatus_acceptsKnownValues() {
         assertEquals(Status.PROJECT_ACTIVE, Status.normalizeProjectStatus("active"))
         assertEquals(Status.PROJECT_COMPLETED, Status.normalizeProjectStatus(" COMPLETED "))

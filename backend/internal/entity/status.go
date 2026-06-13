@@ -58,3 +58,7 @@ func NormalizeTaskStatus(status string) (string, bool) {
 func IsCompletedStatus(status string) bool {
 	return strings.EqualFold(strings.TrimSpace(status), TaskStatusCompleted)
 }
+
+func IsCancelledProjectStatus(status string) bool {
+	return strings.EqualFold(strings.TrimSpace(status), ProjectStatusCancelled)
+}

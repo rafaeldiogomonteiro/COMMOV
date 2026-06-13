@@ -15,6 +15,24 @@ import java.util.Date
 import java.util.Locale
 
 object DashboardPresentation {
+    fun activeProjects(projects: List<ApiProjectSummary>): List<ApiProjectSummary> {
+        return projects.filter { !Status.isProjectCancelled(it.status) }
+    }
+
+    fun tasksFromActiveProjects(
+        tasks: List<ApiTask>,
+        projects: List<ApiProjectSummary>
+    ): List<ApiTask> {
+        val cancelledProjectIds = projects
+            .filter { Status.isProjectCancelled(it.status) }
+            .map { it.projectId }
+            .toSet()
+        if (cancelledProjectIds.isEmpty()) {
+            return tasks
+        }
+        return tasks.filter { it.projectId !in cancelledProjectIds }
+    }
+
     fun openTasks(tasks: List<ApiTask>): List<ApiTask> {
         return tasks.filter { !Status.isTaskCompleted(it.status) }
     }
@@ -67,8 +85,9 @@ object DashboardPresentation {
         tasks: List<ApiTask>,
         limit: Int = 3
     ): List<Project> {
+        val activeProjects = activeProjects(projects)
         val taskCounts = tasks.groupBy { it.projectId }.mapValues { (_, projectTasks) -> projectTasks.size }
-        return projects
+        return activeProjects
             .take(limit)
             .mapIndexed { index, project ->
                 project.toProject(

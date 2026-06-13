@@ -186,6 +186,9 @@ func (s *TaskService) Create(ctx context.Context, actorUserID int, input TaskCre
 	if err != nil {
 		return nil, err
 	}
+	if entity.IsCancelledProjectStatus(project.Status) {
+		return nil, validationError("cannot create tasks for a cancelled project")
+	}
 	userIDs := uniquePositiveIDs(input.UserIDs)
 	if len(userIDs) == 0 {
 		return nil, validationError("userIds is required")

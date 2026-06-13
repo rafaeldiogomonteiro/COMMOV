@@ -44,6 +44,15 @@ func TestIsValidProjectStatus(t *testing.T) {
 	}
 }
 
+func TestIsCancelledProjectStatus(t *testing.T) {
+	if !IsCancelledProjectStatus("cancelled") || !IsCancelledProjectStatus(" CANCELLED ") {
+		t.Fatal("expected cancelled project status to be recognized")
+	}
+	if IsCancelledProjectStatus("active") || IsCancelledProjectStatus("completed") {
+		t.Fatal("expected non-cancelled status to return false")
+	}
+}
+
 func TestIsCompletedStatus(t *testing.T) {
 	if !IsCompletedStatus("completed") || !IsCompletedStatus(" COMPLETED ") {
 		t.Fatal("expected completed task status to be recognized")
