@@ -1,0 +1,737 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[portuguese]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric}
+
+\geometry{margin=2.5cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue,
+    citecolor=black
+}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!8}
+}
+
+\newcommand{\captura}[2][]{%
+    \IfFileExists{#2}{%
+        \includegraphics[#1]{#2}%
+    }{%
+        \fbox{%
+            \parbox[c][6cm][c]{0.9\linewidth}{%
+                \centering\small
+                Colocar captura em\\ \path{#2}%
+            }%
+        }%
+    }%
+}
+
+\begin{document}
+
+% =========================================================
+% CAPA
+% =========================================================
+\begin{titlepage}
+    \centering
+
+    \vspace*{2cm}
+
+    {\Large Instituto Politécnico de Viana do Castelo\par}
+
+    \vspace{1.5cm}
+
+    {\Huge\bfseries COMMOV\par}
+
+    \vspace{0.5cm}
+
+    {\LARGE Sistema de Gestão de Projetos\par}
+
+    \vspace{1cm}
+
+    {\Large Relatório Final de Projeto\par}
+
+    \vfill
+
+    {\large Bruno Rosário - 26207 ; Gonçalo Marques - 31415 ; Rafael Monteiro - 27692 / 3A - Grupo G\par}
+
+    \vspace{0.5cm}
+
+    {\large Ano letivo 2025/2026\par}
+
+    \vspace{0.5cm}
+
+    {\large 1 de maio de 2026\par}
+
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Introdução}
+
+A gestão de projetos e tarefas é uma necessidade cada vez mais comum em contextos académicos, profissionais e organizacionais. Quando existem equipas com diferentes responsabilidades, prazos a cumprir e várias tarefas a decorrer em simultâneo, torna-se importante ter uma ferramenta que ajude a centralizar informação, organizar o trabalho e acompanhar o progresso de cada atividade. Além disso, tendo em conta a utilização cada vez mais frequente de dispositivos móveis, faz sentido que este tipo de solução possa ser usada de forma simples e imediata através de uma aplicação móvel.
+
+No âmbito da unidade curricular de \textit{Computação Móvel}, do 3.\textsuperscript{o} ano do curso de Engenharia Informática do Instituto Politécnico de Viana do Castelo, foi desenvolvido o projeto \textbf{COMMOV} (\textit{ComMov}), uma aplicação orientada para a gestão de projetos, tarefas e utilizadores. O sistema foi pensado para ser utilizado por diferentes perfis, nomeadamente \textit{administrador}, \textit{gestor de projeto} e \textit{utilizador}, permitindo que cada um tenha acesso às funcionalidades adequadas ao seu papel dentro da aplicação.
+
+O principal objetivo do projeto é disponibilizar uma plataforma que permita criar e acompanhar projetos, gerir tarefas, atribuir utilizadores, registar o progresso do trabalho e consultar informação relevante de forma organizada. A interação com o utilizador é feita através da aplicação móvel Android \textbf{Velotask}, desenvolvida em Kotlin com Jetpack Compose e Material Design 3, que comunica com o servidor através de pedidos HTTP em formato JSON.
+
+Este relatório corresponde à versão final do projeto e dá continuidade ao relatório intermédio entregue anteriormente. Na fase intermédia, o desenvolvimento encontrava-se sobretudo focado na base técnica da aplicação, principalmente no \textit{backend}. Nessa altura, já existia uma estrutura inicial em Go, ligação a uma base de dados PostgreSQL, migrações, repositórios de acesso aos dados e alguns \textit{endpoints} HTTP funcionais. No entanto, a aplicação móvel ainda não se encontrava totalmente integrada com o servidor e várias funcionalidades estavam ainda numa fase inicial ou por implementar.
+
+Na fase final, o projeto evoluiu para uma solução mais completa, composta por três partes principais: uma API REST desenvolvida em Go, uma base de dados relacional PostgreSQL e a aplicação Android Velotask. A API foi organizada de forma estruturada, com separação entre rotas, serviços, repositórios e entidades, facilitando a manutenção e evolução do código. A base de dados passou a representar de forma mais completa os dados necessários ao funcionamento da aplicação, sendo gerida com GORM e migrações Goose. A aplicação móvel, por sua vez, passou a comunicar com o servidor e a disponibilizar ao utilizador as principais funcionalidades do sistema.
+
+A solução desenvolvida segue uma arquitetura cliente-servidor, adequada a uma aplicação móvel com um \textit{backend} centralizado. O acesso ao sistema é protegido através de autenticação por \textit{token} do tipo \textit{Bearer}, sendo as \textit{passwords} armazenadas de forma segura através de \textit{hash} bcrypt. Os diferentes perfis de utilizador permitem controlar o acesso às funcionalidades, garantindo que cada utilizador apenas consegue realizar as ações correspondentes ao seu papel. O servidor foi também preparado para ser executado com Docker Compose, o que facilita a instalação, a configuração do ambiente e o trabalho em equipa.
+
+Ao longo da fase final foram também adicionadas funcionalidades que não estavam totalmente previstas ou concluídas na entrega intermédia, como o histórico de registos de tempo por tarefa, a possibilidade de associar vários utilizadores à mesma tarefa, a exportação de relatórios estatísticos em PDF, a gestão de fotografias de perfil e melhorias gerais na interface da aplicação móvel. Estas funcionalidades permitiram tornar o projeto mais completo e aproximá-lo de uma solução que poderia ser utilizada num contexto real.
+
+O desenvolvimento foi realizado por um grupo de três elementos: Bruno Rosário, Gonçalo Marques e Rafael Monteiro. Para organizar o trabalho foram utilizadas ferramentas como o Trello, para planeamento e distribuição de tarefas, o Git/GitHub, para controlo de versões, e a ferramenta Bruno, para testar e validar os \textit{endpoints} da API.
+
+Este documento apresenta a evolução do projeto desde a fase intermédia até à versão final. Ao longo do relatório são descritos os objetivos da aplicação, o âmbito do sistema, as tecnologias utilizadas, os requisitos funcionais e não funcionais, o modelo final da base de dados, a arquitetura da solução, as principais funcionalidades implementadas, as diferenças face à entrega anterior, as instruções de instalação e utilização, os testes realizados e as dificuldades encontradas durante o desenvolvimento. Por fim, são apresentadas as conclusões do trabalho desenvolvido e algumas possibilidades de melhoria futura, como a implementação de uma vista Kanban, pesquisa global e registo autónomo de utilizadores.
+
+
+% ============================================================
+\section{Atualização dos Requisitos}
+% ============================================================
+
+\subsection{Requisitos Funcionais}
+
+A Tabela~\ref{tab:rf} apresenta o estado final dos requisitos funcionais definidos na fase intermédia, indicando o grau de implementação e eventuais notas de atualização.
+
+\begin{longtable}{|p{1.2cm}|p{7.2cm}|p{2.2cm}|p{3.8cm}|}
+\caption{Requisitos funcionais -- estado final}\label{tab:rf}\\
+\hline
+\textbf{ID} & \textbf{Descrição} & \textbf{Estado} & \textbf{Notas}\\
+\hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Descrição} & \textbf{Estado} & \textbf{Notas}\\
+\hline
+\endhead
+RF01 & Apresentar \textit{intro sliders} ao utilizador. & Parcial & Onboarding com 4 ecrãs; persistência local com Room.\\
+\hline
+RF02 & Permitir a criação de conta. & Parcial & Contas criadas pelo administrador; não existe registo público/autónomo.\\
+\hline
+RF03 & Permitir o início de sessão. & Parcial & Autenticação por email/password com token Bearer.\\
+\hline
+RF04 & Gestão do perfil (nome, username, email, fotografia, password). & Parcial & Fotografia e sessão implementadas; edição completa do perfil reservada ao administrador.\\
+\hline
+RF05 & Suportar perfis Administrador, Gestor de Projeto e Utilizador. & Parcial & Enum \texttt{user\_role} na BD e controlo de acesso na API.\\
+\hline
+RF06 & Administrador: criar, editar e remover projetos. & Parcial & Ecrã Projetos: criação, detalhe, edição, eliminação, membros e tarefas.\\
+\hline
+RF07 & Administrador: criar, alterar e remover perfis. & Parcial & Ecrã Admin: listagem, criação, edição, passwords, activação e eliminação.\\
+\hline
+RF08 & Administrador: associar gestor a projeto. & Parcial & Definido na criação/edição do projeto.\\
+\hline
+RF09 & Gestor: associar tarefas a projetos. & Parcial & Criação de tarefas no detalhe de cada projeto.\\
+\hline
+RF10 & Gestor: associar utilizadores a projetos e tarefas. & Parcial & Membros no detalhe de projeto; responsáveis no detalhe de tarefa.\\
+\hline
+RF11 & Gestor: visualizar tarefas concluídas e por concluir. & Parcial & Detalhe de projeto e dashboard.\\
+\hline
+RF12 & Gestor: concluir projetos e avaliar performance. & Parcial & Conclusão de projetos sim; avaliação formal de performance não implementada.\\
+\hline
+RF13 & Gestor: definir roles dos utilizadores no projeto. & Parcial & Roles globais apenas; sem roles por projeto.\\
+\hline
+RF14 & Gestor: atribuir tempo estimado às tarefas. & Parcial & Campo \texttt{estimated\_time} na criação/edição.\\
+\hline
+RF15 & Disponibilizar dashboards. & Parcial & Dashboard com saudação, resumo de tarefas, secções temporais, horas da semana, alertas de tempo estimado, projetos e \textit{pull-to-refresh}.\\
+\hline
+RF16 & Utilizador: visualizar tarefas por realizar. & Parcial & Lista no dashboard e detalhe de projeto.\\
+\hline
+RF17 & Utilizador: consultar histórico de tarefas concluídas. & Parcial & Histórico de registos de tempo (\texttt{task\_time\_entries}); sem ecrã dedicado de histórico global.\\
+\hline
+RF18 & Utilizador: registar execução (data, local, taxa de conclusão, tempo). & Parcial & Data, local, tempo e observações implementados; taxa de conclusão existe no modelo mas com uso limitado na UI.\\
+\hline
+RF19 & Utilizador: associar observações e fotografias. & Parcial & Registos de tempo com observação e foto; upload multipart.\\
+\hline
+RF20 & Utilizador: concluir tarefa. & Parcial & Acção no detalhe da tarefa; eliminação reservada a gestores/admins.\\
+\hline
+RF21 & Visualização Kanban das tarefas. & Não implementado & Tarefas apresentadas em listas, não em colunas Kanban.\\
+\hline
+RF22 & Pesquisa por projeto, utilizador ou tarefa. & Não implementado & Funcionalidade planificada mas não desenvolvida.\\
+\hline
+RF23 & Exportação de estatísticas com filtros. & Parcial & Ecrã Estatísticas (via Definições): PDF por utilizador, projeto ou tarefas de projeto.\\
+\hline
+\end{longtable}
+
+\subsection{Requisitos Não Funcionais}
+
+\begin{longtable}{|p{1.2cm}|p{7.5cm}|p{2.2cm}|p{3.3cm}|}
+\caption{Requisitos não funcionais -- estado final}\label{tab:rnf}\\
+\hline
+\textbf{ID} & \textbf{Descrição} & \textbf{Estado} & \textbf{Notas}\\
+\hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Descrição} & \textbf{Estado} & \textbf{Notas}\\
+\hline
+\endhead
+RNF01 & Controlo de acesso por perfil. & Parcial & Validação em serviços e routers.\\
+\hline
+RNF02 & Interface simples, intuitiva e consistente. & Parcial & Design Material 3; navegação inferior coerente.\\
+\hline
+RNF03 & Mensagens de erro claras. & Parcial & Toasts e mensagens localizadas EN/PT.\\
+\hline
+RNF04 & Código organizado por camadas. & Parcial & Backend: entity/repo/service/router; frontend: UI/ViewModel/data.\\
+\hline
+RNF05 & Integridade referencial na BD. & Parcial & Chaves estrangeiras e \texttt{ON DELETE CASCADE}.\\
+\hline
+RNF06 & Execução contentorizada com Docker. & Parcial & \texttt{docker-compose.yml} com Postgres + backend.\\
+\hline
+RNF07 & Respostas da API em JSON. & Parcial & Todos os endpoints REST.\\
+\hline
+RNF08 & Preparação para autenticação segura. & Parcial & Passwords com bcrypt; tokens com TTL de 7 dias.\\
+\hline
+RNF09 & Evolução futura sem reestruturação drástica. & Parcial & Serviços e routers modulares.\\
+\hline
+RNF10 & Estrutura adequada ao trabalho em equipa. & Parcial & Repositório Git, Trello e divisão backend/frontend.\\
+\hline
+RNF11 & Internacionalização (i18n): suporte a português e inglês. & Parcial & Selecção de idioma no login e definições; strings em \texttt{values-pt/}; bandeiras dinâmicas via API pública de países.\\
+\hline
+\end{longtable}
+
+\subsection{Requisitos adicionais identificados durante o desenvolvimento}
+
+Durante a implementação, surgiram necessidades não previstas explicitamente no relatório intermédio:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{RFA01} -- Persistência local de onboarding e fotografia de perfil offline.
+    \item \textbf{RFA02} -- Histórico detalhado de registos de tempo por tarefa (\texttt{task\_time\_entries}).
+    \item \textbf{RFA03} -- Atribuição de múltiplos utilizadores à mesma tarefa.
+    \item \textbf{RFA04} -- Exportação de relatórios estatísticos em PDF no backend.
+\end{itemize}
+
+% ============================================================
+\section{Modelo Final da Base de Dados}
+% ============================================================
+
+A base de dados da aplicação evoluiu de forma significativa entre a entrega intermédia e a versão final do projeto. No relatório intermédio, o modelo encontrava-se ainda numa fase mais simples, com as entidades principais necessárias ao funcionamento inicial da aplicação, nomeadamente utilizadores, projetos, tarefas e a associação entre utilizadores e projetos. No entanto, à medida que a aplicação foi sendo desenvolvida e integrada com a aplicação móvel, tornou-se necessário adaptar o modelo de dados para suportar funcionalidades mais completas.
+
+Na versão final, o modelo passou a representar melhor a realidade da aplicação, permitindo associar vários utilizadores a uma mesma tarefa, manter um histórico detalhado dos registos de tempo e guardar informação adicional relacionada com o progresso, observações e fotografias. Esta evolução tornou a estrutura da base de dados mais flexível e preparada para responder às necessidades reais do sistema.
+
+A Figura~\ref{fig:er_final} apresenta o modelo final da base de dados da aplicação COMMOV.
+
+\begin{figure}[H]
+\centering
+\captura[width=0.95\textwidth]{imagens/modelo_final_bd.png}
+\caption{Modelo final da base de dados da aplicação COMMOV}
+\label{fig:er_final}
+\end{figure}
+
+\subsection{Descrição das tabelas}
+
+O modelo final é composto por seis tabelas principais: \texttt{users}, \texttt{projects}, \texttt{project\_users}, \texttt{tasks}, \texttt{task\_users} e \texttt{task\_time\_entries}. Cada uma destas tabelas tem uma responsabilidade específica dentro do sistema, permitindo organizar os dados de forma clara e separada.
+
+\begin{table}[H]
+\centering
+\caption{Principais tabelas da base de dados final}
+\begin{tabular}{|p{3.4cm}|p{10.1cm}|}
+\hline
+\textbf{Tabela} & \textbf{Descrição}\\
+\hline
+\texttt{users} & Guarda os utilizadores da aplicação. Inclui dados como nome, \textit{username}, email, \textit{password} protegida por \textit{hash}, fotografia, papel do utilizador e estado da conta. O campo \texttt{role} permite distinguir os diferentes perfis existentes no sistema, como administrador, gestor de projeto e utilizador comum.\\
+\hline
+\texttt{projects} & Guarda a informação dos projetos criados na aplicação. Cada projeto possui nome, descrição, estado, datas de início e fim, um utilizador responsável pela gestão do projeto e um utilizador que o criou. Desta forma, é possível saber quem criou o projeto e quem é o seu gestor.\\
+\hline
+\texttt{project\_users} & Representa a associação entre projetos e utilizadores. Esta tabela permite que um projeto tenha vários utilizadores associados e que um utilizador possa participar em vários projetos. Funciona, por isso, como uma tabela intermédia numa relação muitos-para-muitos.\\
+\hline
+\texttt{tasks} & Guarda as tarefas pertencentes a cada projeto. Cada tarefa possui título, descrição, estado, data estimada de conclusão, data real de conclusão, tempo estimado, tempo gasto, percentagem de conclusão, data de trabalho, localização, observação e fotografia. Esta tabela concentra a informação principal da tarefa, mas a responsabilidade dos utilizadores e o histórico de tempo são tratados em tabelas próprias.\\
+\hline
+\texttt{task\_users} & Representa a associação entre tarefas e utilizadores. Esta tabela foi adicionada na versão final para permitir que uma tarefa possa ter mais do que um utilizador responsável. Assim, a aplicação deixa de estar limitada a uma relação direta entre uma tarefa e um único utilizador.\\
+\hline
+\texttt{task\_time\_entries} & Guarda o histórico dos registos de tempo associados às tarefas. Cada registo indica a tarefa, o utilizador que registou o tempo, o número de horas, a data de trabalho, uma observação, uma fotografia e a data de criação do registo. Esta tabela permite acompanhar o esforço realizado ao longo do tempo, em vez de guardar apenas um valor total acumulado na tarefa.\\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Relações entre as tabelas}
+
+A tabela \texttt{users} está ligada a várias partes do sistema, uma vez que os utilizadores podem criar projetos, gerir projetos, participar em projetos, ser responsáveis por tarefas e registar tempo de trabalho. Na tabela \texttt{projects}, os campos \texttt{manager\_id} e \texttt{created\_by} fazem referência à tabela \texttt{users}, permitindo identificar o gestor do projeto e o utilizador que o criou.
+
+A relação entre \texttt{projects} e \texttt{users} é também reforçada através da tabela \texttt{project\_users}. Esta tabela permite criar uma relação muitos-para-muitos, uma vez que um projeto pode ter vários utilizadores associados e um utilizador pode estar associado a vários projetos.
+
+As tarefas são guardadas na tabela \texttt{tasks} e estão sempre associadas a um projeto através do campo \texttt{project\_id}. Desta forma, cada tarefa pertence a um projeto específico. Na versão final, a associação entre tarefas e utilizadores passou a ser feita através da tabela \texttt{task\_users}, permitindo que a mesma tarefa possa ser atribuída a vários utilizadores.
+
+Por fim, a tabela \texttt{task\_time\_entries} permite guardar vários registos de tempo para a mesma tarefa. Cada registo está associado a uma tarefa e a um utilizador, o que permite saber quem registou o trabalho, em que data, durante quanto tempo e com que observações ou fotografia associada.
+
+\subsection{Alterações face ao modelo intermédio}
+
+A Figura~\ref{fig:er_intermedio} representa o modelo existente na fase intermédia do projeto. Nessa fase, a estrutura da base de dados ainda era mais simples e estava sobretudo preparada para suportar as funcionalidades iniciais do \textit{backend}.
+
+\begin{figure}[H]
+\centering
+\captura[width=0.95\textwidth]{imagens/modelo_intermedio_bd.png}
+\caption{Modelo da base de dados na fase intermédia}
+\label{fig:er_intermedio}
+\end{figure}
+
+Comparando o modelo intermédio com o modelo final, é possível identificar várias alterações importantes:
+
+\begin{itemize}[leftmargin=*]
+\item A tabela \texttt{tasks} deixou de depender diretamente de um único \texttt{user\_id}. No modelo final, a atribuição de utilizadores a tarefas passou a ser feita através da tabela \texttt{task\_users}.
+
+\item Foi criada a tabela \texttt{task\_users}, permitindo uma relação muitos-para-muitos entre tarefas e utilizadores. Esta alteração tornou possível atribuir vários responsáveis à mesma tarefa.
+
+\item Foi adicionada a tabela \texttt{task\_time\_entries}, responsável por guardar o histórico dos registos de tempo feitos pelos utilizadores em cada tarefa.
+
+\item A informação sobre tempo de trabalho deixou de estar limitada ao campo \texttt{time\_spent} da tabela \texttt{tasks}. Com a nova tabela de registos de tempo, passou a ser possível consultar vários registos individuais associados à mesma tarefa.
+
+\item O modelo final passou a suportar observações e fotografias nos registos de tempo, tornando o acompanhamento do trabalho mais detalhado.
+
+\item A estrutura final separa melhor as responsabilidades entre as tabelas, tornando a base de dados mais organizada, flexível e preparada para futuras funcionalidades.
+
+\end{itemize}
+
+Estas alterações foram importantes para aproximar a base de dados das necessidades reais da aplicação. Enquanto o modelo intermédio era suficiente para uma primeira versão do \textit{backend}, o modelo final passou a suportar melhor a lógica da aplicação móvel, especialmente no que diz respeito à atribuição de tarefas, acompanhamento do progresso e registo detalhado do trabalho realizado.
+
+As migrações da base de dados encontram-se na pasta \texttt{backend/data/postgres/migrations/} e são aplicadas através da ferramenta \textbf{Goose}, permitindo manter o histórico de alterações da base de dados de forma organizada e reprodutível.
+
+
+% ============================================================
+\section{Arquitetura Final da Solução}
+% ============================================================
+
+A solução adopta uma arquitectura cliente-servidor clássica, adequada a aplicações móveis com backend centralizado.
+
+\subsection{Visão geral}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={draw, rounded corners, minimum width=3.5cm, minimum height=1.2cm, align=center},
+    layer/.style={font=\small\bfseries}
+]
+    \node[box, fill=blue!8] (android) {App Android\\Velotask};
+    \node[box, fill=green!8, right=4cm of android] (api) {API REST Go\\Chi Router};
+    \node[box, fill=orange!8, right=4cm of api] (db) {PostgreSQL 16};
+
+    \draw[-{Stealth}, thick] (android) -- node[above]{\small HTTPS/HTTP JSON} (api);
+    \draw[-{Stealth}, thick] (api) -- node[above]{\small SQL/GORM} (db);
+
+    \node[layer, below=0.8cm of android] {Camada de Apresentação};
+    \node[layer, below=0.8cm of api] {Camada de Serviço};
+    \node[layer, below=0.8cm of db] {Camada de Persistência};
+\end{tikzpicture}
+\caption{Arquitectura de alto nível do sistema COMMOV}\label{fig:arch}
+\end{figure}
+
+\subsection{Backend}
+
+O backend segue uma organização em camadas:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Router} (\texttt{internal/router/}) -- recebe pedidos HTTP, valida autenticação e serializa respostas JSON.
+    \item \textbf{Services} (\texttt{internal/services/}) -- regras de negócio, autorização por perfil e validações.
+    \item \textbf{Repositories} (\texttt{internal/postgres/}) -- acesso à base de dados via GORM.
+    \item \textbf{Entities} (\texttt{internal/entity/}) -- modelos de domínio.
+\end{enumerate}
+
+O arranque da aplicação é feito em \texttt{backend/cmd/main.go}, que inicializa a ligação PostgreSQL, os serviços, garante a existência de um utilizador administrador por defeito e expõe a API na porta 8080.
+
+\subsection{Frontend Android}
+
+A aplicação móvel combina:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{UI} -- Jetpack Compose (\texttt{ComMovScreens.kt}, \texttt{IntroScreen.kt}).
+    \item \textbf{ViewModels} -- gestão de estado e comunicação assíncrona com a API.
+    \item \textbf{Camada de dados remota} -- clientes HTTP (\texttt{AuthApi}, \texttt{ProjectsApi}, \texttt{TaskApi}, etc.).
+    \item \textbf{Camada de dados local} -- Room (onboarding), SharedPreferences (sessão) e armazenamento offline de fotografias.
+\end{itemize}
+
+A navegação principal utiliza uma barra inferior com quatro destinos: Início, Projetos, Administração (apenas admin) e Definições.
+
+\subsection{Autenticação e autorização}
+
+\begin{itemize}[leftmargin=*]
+    \item Login via \texttt{POST /login}; resposta inclui token e dados do utilizador.
+    \item Pedidos autenticados enviam o token no header \texttt{Authorization: Bearer \textless token\textgreater}.
+    \item Tokens mantidos em memória no servidor com TTL de 7 dias; passwords armazenadas com bcrypt.
+    \item Papéis determinam permissões: administradores gerem utilizadores; gestores e admins gerem projetos/tarefas; utilizadores executam tarefas atribuídas.
+\end{itemize}
+
+% ============================================================
+\section{Tecnologias e Bibliotecas Utilizadas}
+% ============================================================
+
+\begin{table}[H]
+\centering
+\caption{Stack tecnológico final}
+\begin{tabular}{|p{3.5cm}|p{4cm}|p{6.5cm}|}
+\hline
+\textbf{Componente} & \textbf{Tecnologia} & \textbf{Finalidade}\\
+\hline
+Backend & Go 1.22 & API REST\\
+\hline
+Router HTTP & Chi v5 & Rotas e middleware\\
+\hline
+ORM & GORM + driver PostgreSQL & Persistência\\
+\hline
+Migrações & Goose & Evolução do esquema BD\\
+\hline
+Autenticação & golang.org/x/crypto/bcrypt & \textit{Hash} de passwords\\
+\hline
+Base de dados & PostgreSQL 16 & Armazenamento relacional\\
+\hline
+Contentorização & Docker / Docker Compose & Ambiente de execução\\
+\hline
+Frontend & Kotlin 1.9 & Linguagem Android\\
+\hline
+UI & Jetpack Compose + Material 3 & Interface declarativa\\
+\hline
+Imagens & Coil Compose & Carregamento de fotografias\\
+\hline
+Sessão & SharedPreferences & Token e perfil autenticado\\
+\hline
+Build & Gradle 8.9 / AGP 8.9 & Compilação Android\\
+\hline
+Gestão & Git / GitHub, Trello & Versões e planeamento\\
+\hline
+\end{tabular}
+\end{table}
+
+% ============================================================
+\section{Principais Funcionalidades Implementadas}
+% ============================================================
+
+\subsection{Onboarding e autenticação}
+
+Ao abrir a aplicação pela primeira vez, o utilizador percorre quatro \textit{intro sliders} que explicam o propósito da Velotask. O estado de visualização fica guardado localmente; nas sessões seguintes, a app avança directamente para login ou dashboard, consoante exista sessão válida.
+
+O ecrã de login permite autenticação com email e password, validação de campos, recuperação de sessão (\texttt{/check-login}) e selecção de idioma.
+
+\subsection{Dashboard}
+
+O dashboard é o ponto central após autenticação. Apresenta:
+
+\begin{itemize}[leftmargin=*]
+    \item Saudação personalizada e avatar do utilizador;
+    \item Resumo de tarefas por fazer e concluídas;
+    \item Secções ``Atrasadas'', ``Para hoje'' e ``Esta semana'';
+    \item Horas registadas na semana corrente;
+    \item Alertas de tarefas acima do tempo estimado;
+    \item Pré-visualização dos projetos do utilizador;
+    \item \textit{Pull-to-refresh} para actualizar dados.
+\end{itemize}
+
+\subsection{Gestão de projetos}
+
+Utilizadores autorizados (administradores e gestores de projeto) podem criar projetos no ecrã \textbf{Projetos}, definindo gestor, membros, datas e descrição. No detalhe de cada projeto é possível:
+
+\begin{itemize}[leftmargin=*]
+    \item Consultar tarefas associadas;
+    \item Adicionar/remover membros;
+    \item Editar estado (activo, concluído, cancelado);
+    \item Eliminar projeto (com confirmação);
+    \item Criar novas tarefas.
+\end{itemize}
+
+\subsection{Gestão de tarefas}
+
+Cada tarefa suporta título, descrição, data estimada, tempo estimado, localização e múltiplos responsáveis. No detalhe da tarefa, o utilizador pode:
+
+\begin{itemize}[leftmargin=*]
+    \item Registar tempo despendido com observação e fotografia;
+    \item Consultar histórico de registos (\texttt{task\_time\_entries});
+    \item Adicionar/remover responsáveis (gestores);
+    \item Concluir a tarefa ou eliminá-la (eliminação reservada a gestores/admins).
+\end{itemize}
+
+\subsection{Administração}
+
+O ecrã de administração, acessível apenas a administradores, permite listar utilizadores, criar contas, editar dados, alterar passwords, activar/desactivar contas (na edição) e eliminar utilizadores. Inclui métricas resumidas (total, activos, admins, gestores).
+
+\subsection{Estatísticas e exportação}
+
+Gestores e administradores acedem, através de \textbf{Definições}, a um ecrã de estatísticas com exportação PDF para:
+
+\begin{itemize}[leftmargin=*]
+    \item Relatório por utilizador;
+    \item Relatório por projeto;
+    \item Relatório de tarefas de um projeto.
+\end{itemize}
+
+Os PDFs são gerados no backend e guardados/abertos no dispositivo Android.
+
+\subsection{Definições}
+
+O ecrã de definições permite alterar fotografia de perfil, escolher idioma (português/inglês), consultar dados da conta, aceder a estatísticas (se autorizado) e terminar sessão.
+
+% ============================================================
+\section{Funcionalidades Extra Desenvolvidas}
+% ============================================================
+
+Para além do âmbito inicial, o grupo implementou funcionalidades complementares:
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Fotografia offline antes do login} -- permite seleccionar foto de perfil antes de autenticação; a imagem fica pendente e sincroniza após login.
+    \item \textbf{Sincronização de fotografia de perfil} -- \texttt{ProfilePhotoSyncManager} envia fotos pendentes e notifica o utilizador.
+    \item \textbf{Persistência de onboarding com Room} -- evita repetir os \textit{intro sliders} desnecessariamente.
+    \item \textbf{Histórico de registos de tempo} -- cada entrada de tempo é individualizada, com foto e observação.
+    \item \textbf{Atribuição múltipla de tarefas} -- vários utilizadores podem estar associados à mesma tarefa.
+    \item \textbf{Esqueletos de carregamento (\textit{skeleton screens})} -- melhoram a percepção de performance durante fetch de dados.
+    \item \textbf{Restauro de sessão} -- verificação automática de token ao arrancar a aplicação.
+\end{enumerate}
+
+% ============================================================
+\section{Justificação das Alterações face à Entrega Intermédia}
+% ============================================================
+
+A evolução do projecto reflecte decisões técnicas tomadas à medida que o desenvolvimento avançou:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{De backend mínimo para API completa} -- na fase intermédia existiam apenas \texttt{/health} e \texttt{POST /users}. A versão final inclui autenticação, CRUD de utilizadores, projetos, tarefas, upload de fotografias e exportação PDF, necessários para a app móvel funcionar de forma autónoma.
+
+    \item \textbf{Implementação do frontend Android} -- previsto no relatório intermédio mas ainda inexistente; passou a ser o cliente principal, com Compose em vez de XML puro, alinhando-se com as boas práticas actuais de desenvolvimento Android.
+
+    \item \textbf{Modelo de dados alargado} -- a tabela \texttt{task\_users} surgiu da necessidade real de equipas partilharem tarefas. \texttt{task\_time\_entries} permitiu histórico auditável de execução, mais adequado do que sobrescrever campos na tabela \texttt{tasks}.
+
+    \item \textbf{Simplificação de estados de tarefa} -- estados intermédios (\texttt{pending}, \texttt{in\_progress}) foram consolidados em \texttt{todo}/\texttt{completed} para reduzir complexidade na UI móvel, mantendo estados de projecto mais ricos (\texttt{active}, \texttt{completed}, \texttt{on\_hold}, \texttt{cancelled}).
+
+    \item \textbf{Autenticação por token em memória} -- solução pragmática para o âmbito académico; cumpre RNF08 sem introduzir JWT/OAuth.
+
+    \item \textbf{Registo de contas pelo administrador} -- em vez de registo público, optámos por criação controlada de contas, reforçando o controlo de perfis num contexto empresarial simulado.
+
+    \item \textbf{Nome comercial Velotask} -- mantém a identidade visual dos mockups, enquanto o repositório e backend conservam a designação académica COMMOV.
+
+    \item \textbf{Funcionalidades adiadas} -- Kanban (RF21) e pesquisa global (RF22) foram postergadas para priorizar um núcleo funcional sólido dentro do prazo disponível.
+\end{itemize}
+
+% ============================================================
+\section{Capturas de Ecrã da Aplicação}
+% ============================================================
+
+As seguintes figuras ilustram os principais ecrãs da aplicação Velotask. Substituir os ficheiros na pasta \texttt{figures/} pelas capturas reais antes da entrega final.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \captura[width=\textwidth]{figures/ecra_intro.png}
+        \caption{Intro/onboarding}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \captura[width=\textwidth]{figures/ecra_login.png}
+        \caption{Início de sessão}
+    \end{subfigure}
+    \caption{Ecrãs iniciais da aplicação}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \captura[width=\textwidth]{figures/ecra_dashboard.png}
+        \caption{Dashboard}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \captura[width=\textwidth]{figures/ecra_projetos.png}
+        \caption{Lista de projetos}
+    \end{subfigure}
+    \caption{Navegação principal}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \captura[width=\textwidth]{figures/ecra_tarefa.png}
+        \caption{Detalhe de tarefa}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \captura[width=\textwidth]{figures/ecra_admin.png}
+        \caption{Administração de utilizadores}
+    \end{subfigure}
+    \caption{Gestão operacional}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \captura[width=0.45\textwidth]{figures/ecra_estatisticas.png}
+    \caption{Exportação de estatísticas em PDF}
+\end{figure}
+
+% ============================================================
+\section{Ligações de Apoio}
+% ============================================================
+
+\subsection{Mockups e protótipos (Figma)}
+
+Os mockups originais do projecto encontram-se disponíveis em:
+
+\begin{center}
+\url{https://www.figma.com/design/o6ar6AI25khe4mwHBM6xve/Untitled?node-id=0-1&p=f}
+\end{center}
+
+\subsection{Repositório Git}
+
+Código-fonte, histórico de commits e documentação:
+
+\begin{center}
+\url{https://github.com/rafaeldiogomonteiro/COMMOV}
+\end{center}
+
+\subsection{Plataforma de gestão de projecto (Trello)}
+
+Planeamento e acompanhamento de tarefas da equipa:
+
+\begin{center}
+\url{https://trello.com/b/SEU-QUADRO-TRELLO-AQUI}
+\end{center}
+
+
+
+% ============================================================
+\section{Testes e Validações Efectuadas}
+% ============================================================
+
+\subsection{Testes automatizados no backend}
+
+Foram implementados testes unitários em Go, executáveis com:
+
+\begin{lstlisting}
+cd backend
+go test ./...
+\end{lstlisting}
+
+Os testes cobrem, entre outros:
+
+\begin{itemize}[leftmargin=*]
+    \item Expiração e revogação de tokens (\texttt{auth\_service\_test.go});
+    \item Normalização de estados de projecto e validação de datas (\texttt{project\_service\_test.go});
+    \item Estados de entidades (\texttt{status\_test.go}, \texttt{user\_test.go});
+    \item Endpoint de saúde (\texttt{health\_test.go}).
+\end{itemize}
+
+\subsection{Testes no frontend}
+
+Existem testes unitários básicos em \texttt{StatusTest.kt} para normalização de estados de tarefa. Testes instrumentados (Espresso) encontram-se configurados mas com cobertura limitada. 
+
+\subsection{Validação manual}
+
+A validação funcional foi efectuada de forma manual através de:
+
+\begin{itemize}[leftmargin=*]
+    \item Emulador Android Studio ligado ao backend Docker local;
+    \item Cenários por perfil: admin, gestor de projecto e utilizador comum;
+    \item Verificação de fluxos críticos: login, CRUD, registo de tempo, conclusão de tarefa, exportação PDF e troca de idioma.
+\end{itemize}
+
+\subsection{Resultados gerais}
+
+Os fluxos principais funcionam de forma consistente. Foram identificadas limitações conhecidas: ausência da vista Kanban e registo autónomo de utilizadores. Estas funcionalidades ficam registadas como evolução futura.
+
+% ============================================================
+\section{Instruções de Instalação, Execução e Utilização}
+% ============================================================
+
+\subsection{Pré-requisitos}
+
+\begin{itemize}[leftmargin=*]
+    \item Docker e Docker Compose;
+    \item Go 1.22+ (opcional, para desenvolvimento local);
+    \item Android Studio (Koala ou superior recomendado);
+    \item Emulador Android API 24+ ou dispositivo físico na mesma rede.
+\end{itemize}
+
+\subsection{Arranque do backend}
+
+\begin{lstlisting}
+cd backend
+docker compose up -d --build
+\end{lstlisting}
+
+Serviços disponíveis:
+
+\begin{itemize}[leftmargin=*]
+    \item API: \url{http://localhost:8080}
+    \item Health check: \texttt{GET /health}
+    \item PostgreSQL: \texttt{localhost:5432} (user/pass: \texttt{postgres/postgres})
+\end{itemize}
+
+Por defeito, é criado um administrador configurável via \texttt{.env}:
+
+\begin{lstlisting}
+DEFAULT_USER=admin@commov.local
+DEFAULT_USER_PASS=admin123
+\end{lstlisting}
+
+Migrações manuais (se necessário):
+
+\begin{lstlisting}
+cd backend
+make goose-up
+\end{lstlisting}
+
+\subsection{Configuração e execução da app Android}
+
+1. Criar/editar \texttt{frontend/.env}:
+
+\begin{lstlisting}
+API_BASE_URL=http://10.0.2.2:8080
+\end{lstlisting}
+
+\textit{Nota: \texttt{10.0.2.2} é o endereço do localhost visto a partir do emulador Android.}
+
+2. Abrir a pasta \texttt{frontend/} no Android Studio.
+
+3. Sincronizar Gradle e executar a app num emulador ou dispositivo.
+
+\subsection{Utilização básica}
+
+\begin{enumerate}[leftmargin=*]
+    \item Na primeira execução, percorrer os \textit{intro sliders} ou saltar.
+    \item Iniciar sessão com credenciais válidas (ex.: admin por defeito).
+    \item Explorar o dashboard e aceder a ``Projetos''.
+    \item Administradores: criar utilizadores em ``Admin''.
+    \item Gestores/admins: criar projectos, adicionar membros e tarefas.
+    \item Utilizadores: abrir tarefas atribuídas, registar tempo e concluir trabalho.
+    \item Gestores/admins: exportar PDFs em ``Estatísticas'' (acessível via definições ou menu).
+    \item Alterar idioma em ``Definições'' ou no ecrã de login.
+    \item Terminar sessão nas definições.
+\end{enumerate}
+
+
+% ============================================================
+\section{Conclusão}
+% ============================================================
+
+O projeto COMMOV evoluiu significativamente desde a fase intermédia, passando de uma base backend inicial para uma solução móvel integrada e funcional. Na fase anterior, o sistema já apresentava uma fundação técnica consistente, com uma arquitetura organizada por camadas, ligação à base de dados PostgreSQL, migrações iniciais, repositórios de dados e endpoints básicos para validação da API. Essa estrutura permitiu dar continuidade ao desenvolvimento de forma mais organizada e sustentada.
+Na versão final, essa base foi consolidada e expandida através da implementação da aplicação Android Velotask, que permite suportar o ciclo de vida de projetos e tarefas em contexto móvel. O sistema passou a integrar diferentes perfis de utilizador, autenticação, gestão de projetos, gestão de tarefas, associação de utilizadores a projetos e tarefas, bem como funcionalidades adicionais como o registo e histórico de tempo e a exportação de relatórios em PDF.
+O modelo de dados também evoluiu relativamente à fase intermédia, passando a representar de forma mais completa as relações entre utilizadores, projetos, tarefas e registos de tempo. Esta evolução permitiu responder de forma mais adequada aos requisitos funcionais definidos, garantindo uma persistência relacional mais robusta e coerente com as necessidades da aplicação.
+Apesar de a maior parte dos objetivos inicialmente definidos ter sido concretizada, continuam a existir oportunidades de melhoria.
+
+Em suma, o projeto COMMOV demonstra uma evolução clara entre a fase intermédia e a versão final. O sistema apresenta coerência técnica, uma arquitetura adequada, boa integração entre backend e aplicação móvel e uma base sólida para futuras melhorias. A solução desenvolvida cumpre o seu objetivo principal: disponibilizar uma aplicação móvel funcional para apoio à gestão de projetos, tarefas e tempo de trabalho.
+\vspace{0.5cm}
+\noindent
+\textbf{Repositório:} \url{https://github.com/rafaeldiogomonteiro/COMMOV}
+
+\end{document}
+
