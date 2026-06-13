@@ -85,6 +85,10 @@
     <string name="confirm_action">Confirmar</string>
     <string name="confirm_complete_title">Concluir tarefa</string>
     <string name="confirm_complete_task_message">Marcar esta tarefa como concluída?</string>
+    <string name="confirm_complete_project_title">Concluir projeto</string>
+    <string name="confirm_complete_project_message">Marcar este projeto como concluído?</string>
+    <string name="project_complete">Marcar concluído</string>
+    <string name="project_completed">Projeto concluído.</string>
     <string name="project_remove_member">Remover</string>
     <string name="project_add_member">Adicionar membro</string>
     <string name="project_member_added">Membro adicionado.</string>

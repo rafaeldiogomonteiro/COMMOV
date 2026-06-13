@@ -968,9 +968,9 @@ fun ProjectsScreen() {
     var showEditProject by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf("") }
     var editDescription by remember { mutableStateOf("") }
-    var editStatus by remember { mutableStateOf("active") }
     var showAddMember by remember { mutableStateOf(false) }
     var showDeleteProjectConfirm by remember { mutableStateOf(false) }
+    var showCompleteProjectConfirm by remember { mutableStateOf(false) }
     var pickerUsers by remember { mutableStateOf<List<ApiUser>>(emptyList()) }
     val project = state.projects.firstOrNull { it.projectId == selectedProjectId }
     val projectDetailRefreshLauncher = rememberLauncherForActivityResult(
@@ -1106,13 +1106,10 @@ fun ProjectsScreen() {
                         onEdit = {
                             editName = project.nameText.orEmpty()
                             editDescription = project.descriptionText.orEmpty()
-                            editStatus = when (project.status.lowercase(Locale.getDefault())) {
-                                "on_hold" -> "cancelled"
-                                else -> project.status
-                            }
                             showEditProject = true
                         },
                         onDelete = { showDeleteProjectConfirm = true },
+                        onComplete = { showCompleteProjectConfirm = true },
                         onCreateTask = {
                             val intent = Intent(context, CreateTaskActivity::class.java)
                             intent.putExtra(CreateTaskActivity.EXTRA_PROJECT_ID, project.projectId)
@@ -1187,6 +1184,30 @@ fun ProjectsScreen() {
         )
     }
 
+    if (showCompleteProjectConfirm && project != null) {
+        ConfirmActionDialog(
+            title = stringResource(R.string.confirm_complete_project_title),
+            message = stringResource(R.string.confirm_complete_project_message),
+            confirmText = stringResource(R.string.project_complete),
+            confirmColorResId = R.color.project_green,
+            onDismiss = { showCompleteProjectConfirm = false },
+            onConfirm = {
+                showCompleteProjectConfirm = false
+                val projectId = project.projectId
+                runProjectMutation(
+                    mutation = { token ->
+                        projectsApi.updateProject(
+                            token,
+                            projectId,
+                            UpdateProjectInput(status = Status.PROJECT_COMPLETED)
+                        )
+                    },
+                    successMessageResId = R.string.project_completed
+                )
+            }
+        )
+    }
+
     if (showAddMember && project != null) {
         UserPickerDialog(
             title = stringResource(R.string.project_add_member),
@@ -1209,10 +1230,6 @@ fun ProjectsScreen() {
             onNameChange = { editName = it },
             description = editDescription,
             onDescriptionChange = { editDescription = it },
-            status = editStatus,
-            statusOptions = projectStatusLabels(),
-            statusValues = projectStatusValues(),
-            onStatusChange = { editStatus = it },
             onDismiss = { showEditProject = false },
             onSave = {
                 runProjectMutation(
@@ -1222,8 +1239,7 @@ fun ProjectsScreen() {
                             project.projectId,
                             UpdateProjectInput(
                                 name = editName.trim(),
-                                description = editDescription.trim(),
-                                status = editStatus.trim()
+                                description = editDescription.trim()
                             )
                         )
                     },
@@ -1325,6 +1341,7 @@ private fun ProjectDetailView(
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onComplete: () -> Unit,
     onCreateTask: () -> Unit,
     onTaskClick: (Int) -> Unit,
     onRemoveMember: (ProjectMember) -> Unit,
@@ -1495,29 +1512,36 @@ private fun ProjectDetailView(
         }
 
         if (canManage) {
-            Row(
+            OutlineActionButton(
+                text = stringResource(R.string.project_edit),
+                colorResId = R.color.bottom_nav_selected,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 22.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlineActionButton(
-                    text = stringResource(R.string.project_edit),
-                    colorResId = R.color.bottom_nav_selected,
+                    .padding(top = 22.dp)
+                    .height(46.dp),
+                onClick = onEdit
+            )
+            if (!project.status.equals(Status.PROJECT_COMPLETED, ignoreCase = true)) {
+                FilledActionButton(
+                    text = stringResource(R.string.project_complete),
+                    colorResId = R.color.project_green,
+                    radius = 12.dp,
                     modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
-                    onClick = onEdit
-                )
-                OutlineActionButton(
-                    text = stringResource(R.string.project_delete),
-                    colorResId = R.color.settings_logout,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
-                    onClick = onDelete
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .height(50.dp),
+                    onClick = onComplete
                 )
             }
+            OutlineActionButton(
+                text = stringResource(R.string.project_delete),
+                colorResId = R.color.settings_logout,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .height(46.dp),
+                onClick = onDelete
+            )
         }
     }
 }
@@ -5653,10 +5677,6 @@ private fun EditProjectDialog(
     onNameChange: (String) -> Unit,
     description: String,
     onDescriptionChange: (String) -> Unit,
-    status: String,
-    statusOptions: List<String>,
-    statusValues: List<String>,
-    onStatusChange: (String) -> Unit,
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -5703,39 +5723,18 @@ private fun EditProjectDialog(
                     onValueChange = onDescriptionChange,
                     singleLine = false
                 )
-                CreateTaskLabel(R.string.create_task_status)
-                StatusChoiceInput(
-                    selected = status,
-                    labels = statusOptions,
-                    values = statusValues,
-                    onSelected = onStatusChange
-                )
             }
 
-            Row(
+            FilledActionButton(
+                text = stringResource(R.string.create_project_save),
+                colorResId = R.color.login_button,
+                radius = 12.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 18.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlineActionButton(
-                    text = stringResource(android.R.string.cancel),
-                    colorResId = R.color.dashboard_text_secondary,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
-                    onClick = onDismiss
-                )
-                FilledActionButton(
-                    text = stringResource(R.string.create_project_save),
-                    colorResId = R.color.login_button,
-                    radius = 12.dp,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(46.dp),
-                    onClick = onSave
-                )
-            }
+                    .padding(top = 18.dp)
+                    .height(46.dp),
+                onClick = onSave
+            )
         }
     }
 }
