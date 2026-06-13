@@ -4602,8 +4602,8 @@ private fun ProjectCard(
             color = colorResource(R.color.dashboard_text_secondary),
             fontSize = 14.sp,
             lineHeight = 16.sp,
-            // Mantém a altura do card consistente mesmo com descrições curtas.
-            minLines = 2,
+            // Evita que descrições curtas fiquem com "vazios" reservados por minLines.
+            minLines = 1,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -5901,6 +5901,9 @@ private fun PickerInput(
     @DrawableRes iconResId: Int,
     onClick: () -> Unit
 ) {
+    val isEmpty = value.isEmpty()
+    val iconTintColorResId =
+        if (isEmpty) R.color.dashboard_text_secondary else R.color.dashboard_text_primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -5914,7 +5917,7 @@ private fun PickerInput(
         Text(
             text = value.ifEmpty { hint },
             modifier = Modifier.weight(1f),
-            color = colorResource(if (value.isEmpty()) R.color.login_icon else R.color.dashboard_text_primary),
+            color = colorResource(if (isEmpty) R.color.login_icon else R.color.dashboard_text_primary),
             fontSize = 15.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -5924,7 +5927,7 @@ private fun PickerInput(
             contentDescription = null,
             modifier = Modifier.size(20.dp),
             contentScale = ContentScale.Fit,
-            colorFilter = ColorFilter.tint(colorResource(R.color.dashboard_text_secondary))
+            colorFilter = ColorFilter.tint(colorResource(iconTintColorResId))
         )
     }
 }
