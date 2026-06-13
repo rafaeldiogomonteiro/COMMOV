@@ -4,6 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage[portuguese]{babel}
 \usepackage{geometry}
+\usepackage{setspace}
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{booktabs}
@@ -19,6 +20,8 @@
 \usetikzlibrary{positioning, arrows.meta, shapes.geometric}
 
 \geometry{margin=2.5cm}
+\onehalfspacing
+\setlength{\parskip}{0.6em plus 0.15em minus 0.1em}
 \hypersetup{
     colorlinks=true,
     linkcolor=black,
@@ -44,6 +47,26 @@
             }%
         }%
     }%
+}
+
+% Comparação lado a lado: protótipo Figma (esquerda) vs. implementação real (direita)
+\newcommand{\comparacaoFigma}[2]{%
+    \begin{figure}[H]
+        \centering
+        \begin{subfigure}{0.45\textwidth}
+            \centering
+            \captura[width=\textwidth]{figures/figma_#1.png}
+            \caption{Protótipo (Figma)}
+        \end{subfigure}
+        \hfill
+        \begin{subfigure}{0.45\textwidth}
+            \centering
+            \captura[width=\textwidth]{figures/ecra_#1.png}
+            \caption{Implementação (app)}
+        \end{subfigure}
+        \caption{#2}
+        \label{fig:comparacao-#1}
+    \end{figure}%
 }
 
 \begin{document}
@@ -522,61 +545,23 @@ A evolução do projecto reflecte decisões técnicas tomadas à medida que o de
 \section{Capturas de Ecrã da Aplicação}
 % ============================================================
 
-As seguintes figuras ilustram os principais ecrãs da aplicação Velotask. Substituir os ficheiros na pasta \texttt{figures/} pelas capturas reais antes da entrega final.
+Esta secção apresenta uma comparação visual entre os mockups originais desenhados no Figma e a implementação final da aplicação Velotask. Em cada figura, o ecrã à \textbf{esquerda} corresponde ao protótipo de interface; o ecrã à \textbf{direita} mostra a captura real obtida no emulador Android.
 
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \captura[width=\textwidth]{figures/ecra_intro.png}
-        \caption{Intro/onboarding}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \captura[width=\textwidth]{figures/ecra_login.png}
-        \caption{Início de sessão}
-    \end{subfigure}
-    \caption{Ecrãs iniciais da aplicação}
-\end{figure}
+Os ficheiros de imagem devem ser colocados na pasta \texttt{figures/}, com o prefixo \texttt{figma\_} para os prints do Figma e \texttt{ecra\_} para as capturas da app (ver \texttt{figures/README.md}).
 
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \captura[width=\textwidth]{figures/ecra_dashboard.png}
-        \caption{Dashboard}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \captura[width=\textwidth]{figures/ecra_projetos.png}
-        \caption{Lista de projetos}
-    \end{subfigure}
-    \caption{Navegação principal}
-\end{figure}
+\comparacaoFigma{intro}{Ecrã de onboarding / intro sliders}
 
-\begin{figure}[H]
-    \centering
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \captura[width=\textwidth]{figures/ecra_tarefa.png}
-        \caption{Detalhe de tarefa}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.45\textwidth}
-        \centering
-        \captura[width=\textwidth]{figures/ecra_admin.png}
-        \caption{Administração de utilizadores}
-    \end{subfigure}
-    \caption{Gestão operacional}
-\end{figure}
+\comparacaoFigma{login}{Ecrã de início de sessão}
 
-\begin{figure}[H]
-    \centering
-    \captura[width=0.45\textwidth]{figures/ecra_estatisticas.png}
-    \caption{Exportação de estatísticas em PDF}
-\end{figure}
+\comparacaoFigma{dashboard}{Dashboard principal}
+
+\comparacaoFigma{projetos}{Lista de projetos}
+
+\comparacaoFigma{tarefa}{Detalhe de tarefa com registo de tempo}
+
+\comparacaoFigma{admin}{Administração de utilizadores}
+
+\comparacaoFigma{estatisticas}{Exportação de estatísticas em PDF}
 
 % ============================================================
 \section{Ligações de Apoio}
